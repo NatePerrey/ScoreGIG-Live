@@ -2,7 +2,7 @@
 // without changing route logic much; the queries are deliberately plain.
 import Database from "better-sqlite3";
 
-export const db = new Database("scoregig.db");
+export const db = new Database(process.env.DATABASE_PATH || "scoregig.db");
 db.pragma("journal_mode = WAL");
 
 db.exec(`
