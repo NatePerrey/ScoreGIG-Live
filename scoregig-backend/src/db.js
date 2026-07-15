@@ -2,7 +2,7 @@
 // without changing route logic much; the queries are deliberately plain.
 import Database from "better-sqlite3";
 
-export const db = new Database(process.env.DATABASE_PATH || "scoregig.db");
+export const db = new Database("scoregig.db");
 db.pragma("journal_mode = WAL");
 
 db.exec(`
@@ -145,6 +145,8 @@ addColumn("ALTER TABLE gigs ADD COLUMN service TEXT DEFAULT 'scorekeeper'"); // 
 addColumn("ALTER TABLE gigs ADD COLUMN cancelled_by INTEGER");       // who cancelled (owner or scorekeeper)
 addColumn("ALTER TABLE gigs ADD COLUMN cancel_reason TEXT");
 addColumn("ALTER TABLE gigs ADD COLUMN province TEXT");              // 2-letter code; drives the minimum-wage pay floor
+addColumn("ALTER TABLE gigs ADD COLUMN hidden_by_owner INTEGER DEFAULT 0");  // organizer removed a finished gig from their My Gigs list (Jul1 #7)
+addColumn("ALTER TABLE users ADD COLUMN member_orgs TEXT");                  // sports orgs/associations the user belongs to, collected at signup (Jul1 #3)
 addColumn("ALTER TABLE users ADD COLUMN onboarding_submitted INTEGER DEFAULT 0"); // Stripe details submitted (#11)
 addColumn("ALTER TABLE users ADD COLUMN phone TEXT");                            // optional, for SMS notifications
 addColumn("ALTER TABLE users ADD COLUMN notifications_enabled INTEGER DEFAULT 1"); // 1=on (default), 0=opted out

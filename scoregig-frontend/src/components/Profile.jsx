@@ -28,6 +28,7 @@ export default function Profile({ me, myGigs, toast, refreshMe }) {
 
   const [cashOutResult, setCashOutResult] = useState(null);
   const [cashingOut, setCashingOut] = useState(false);
+  const [rechecking, setRechecking] = useState(false); // pressed/loading state on Re-check status (#4)
 
   const cashOut = async () => {
     setCashingOut(true);
@@ -69,6 +70,8 @@ export default function Profile({ me, myGigs, toast, refreshMe }) {
   };
 
   const recheck = async (silent = false) => {
+    if (rechecking) return;
+    setRechecking(true);
     try {
       // Retry up to 3 times with a short delay — Stripe can lag on capabilities
       let d;
@@ -80,6 +83,7 @@ export default function Profile({ me, myGigs, toast, refreshMe }) {
       if (!silent) toast(d.payoutsEnabled ? "Payouts enabled — you're all set! 🎉" : "Almost there — Stripe is still verifying. Try again in a moment.");
       refreshMe();
     } catch (e) { if (!silent) toast(e.message, true); }
+    finally { setRechecking(false); }
   };
 
   // Auto-recheck when returning from Stripe onboarding
@@ -139,8 +143,11 @@ export default function Profile({ me, myGigs, toast, refreshMe }) {
             <p className="text-xs" style={{ color: C.ink60 }}>
               You've finished the Stripe form — no need to do it again. Stripe is verifying and linking your account, which may take a few minutes. We'll switch on gig requests automatically once it's ready.
             </p>
-            <button onClick={() => recheck(false)} className="w-full rounded-lg py-2.5 font-bold text-white" style={{ backgroundColor: C.navy }}>
-              Re-check status
+            <button onClick={() => recheck(false)} disabled={rechecking}
+              className="flex w-full items-center justify-center gap-2 rounded-lg py-2.5 font-bold text-white disabled:opacity-80"
+              style={{ backgroundColor: rechecking ? C.navySoft : C.navy }}>
+              {rechecking && <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />}
+              {rechecking ? "Checking…" : "Re-check status"}
             </button>
             <button onClick={onboard} className="w-full text-xs font-semibold" style={{ color: C.ink60 }}>
               Need to update your details? Reopen Stripe setup
@@ -158,8 +165,10 @@ export default function Profile({ me, myGigs, toast, refreshMe }) {
               Set up payouts with Stripe
             </button>
             <p className="mt-1 text-[11px] text-center" style={{ color: C.ink60 }}>This may take a few minutes to approve and link.</p>
-            <button onClick={() => recheck(false)} className="w-full text-xs font-semibold" style={{ color: C.ink60 }}>
-              Already finished? Re-check status
+            <button onClick={() => recheck(false)} disabled={rechecking}
+              className="flex w-full items-center justify-center gap-2 text-xs font-semibold disabled:opacity-70" style={{ color: C.ink60 }}>
+              {rechecking && <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />}
+              {rechecking ? "Checking with Stripe…" : "Already finished? Re-check status"}
             </button>
           </div>
         )

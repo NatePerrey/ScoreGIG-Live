@@ -38,8 +38,11 @@ gigs.get("/min-wage", (_req, res) => {
 
 gigs.get("/gigs", auth(), (req, res) => {
   if (req.query.mine) {
+    // Gigs I posted (unless I've removed them from my list) OR claimed OR
+    // requested. hidden_by_owner only hides a finished gig from the organizer's
+    // own view — a scorekeeper who worked it still sees it via claimed_by.
     const rows = db.prepare(
-      "SELECT id FROM gigs WHERE owner_id = ? OR claimed_by = ? OR requested_by = ? ORDER BY start_at"
+      "SELECT id FROM gigs WHERE (owner_id = ? AND COALESCE(hidden_by_owner,0) = 0) OR claimed_by = ? OR requested_by = ? ORDER BY start_at"
     ).all(req.user.id, req.user.id, req.user.id);
     return res.json(rows.map((r) => gigWithEvents(r.id)));
   }
@@ -429,6 +432,22 @@ gigs.post("/gigs/:id/cancel", auth(), async (req, res) => {
     console.error("Organizer cancel refund failed:", err.code || err.message);
     res.status(500).json({ error: "Couldn't process the cancellation refund — please try again." });
   }
+});
+
+// Organizer removes a finished gig from their own My Gigs list. This is a
+// personal hide, not a delete: the gig row and its full history are preserved
+// for records, payouts, and the scorekeeper's view. Only terminal gigs qualify
+// so an active gig can't be hidden by accident. 'issue' is excluded on purpose
+// — a gig under review should stay visible until it's resolved. (Jul1 #7)
+gigs.post("/gigs/:id/dismiss", auth(), (req, res) => {
+  const gig = db.prepare("SELECT * FROM gigs WHERE id = ?").get(req.params.id);
+  if (!gig || gig.owner_id !== req.user.id) return res.status(404).json({ error: "Gig not found." });
+  const dismissible = ["completed", "paid", "no_show", "cancelled"];
+  if (!dismissible.includes(gig.status)) {
+    return res.status(409).json({ error: "Only finished, worked, or cancelled gigs can be removed from your list." });
+  }
+  db.prepare("UPDATE gigs SET hidden_by_owner=1 WHERE id=?").run(gig.id);
+  res.json({ ok: true, id: gig.id });
 });
 
 /* ------------------------- APPROVE & RELEASE NOW ------------------------- */

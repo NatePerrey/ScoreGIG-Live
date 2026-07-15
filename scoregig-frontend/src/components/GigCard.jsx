@@ -2,7 +2,7 @@
 // hinted client-side for UX, but the server is the referee: any action can
 // come back with a 409 and we just show its message.
 import { useState } from "react";
-import { Clock, MapPin, CheckCircle2, AlertTriangle, Trophy, Pencil, Eye, Ban, Timer, ClipboardCheck } from "lucide-react";
+import { Clock, MapPin, CheckCircle2, AlertTriangle, Trophy, Pencil, Eye, Ban, Timer, ClipboardCheck, X } from "lucide-react";
 import { C, GIG_TYPES, MIN, fmtDT, fmtT, fmtDuration, serviceLabel, startTerm, endTerm, kmBetween, fmtKm } from "../theme.js";
 import { Pill, BadgeChip, PayTimeline } from "./ui.jsx";
 import TipPanel from "./TipPanel.jsx";
@@ -11,6 +11,7 @@ export default function GigCard({ gig, me, viewer, onAction, onBadge, onEdit, on
   const now = Date.now();
   const [confirmCancel, setConfirmCancel] = useState(false); // scorekeeper cancelling their claim
   const [confirmOwnerCancel, setConfirmOwnerCancel] = useState(false); // organizer cancelling the gig
+  const [confirmDismiss, setConfirmDismiss] = useState(false); // organizer removing a finished gig from their list (#7)
   const [busy, setBusy] = useState(false); // prevents double-clicks on action buttons
 
   // Run an action once: disable buttons while it's in flight so a fast double-tap
@@ -40,6 +41,8 @@ export default function GigCard({ gig, me, viewer, onAction, onBadge, onEdit, on
   const canCancelClaim = claimedByMe && ["claimed", "arrived"].includes(gig.status);
   // Organizer can cancel their gig anytime before payout/completion.
   const canOwnerCancel = ownedByMe && ["open", "pending", "claimed", "arrived"].includes(gig.status);
+  // Organizer can remove a finished/worked/cancelled gig from their own list.
+  const canDismiss = ownedByMe && ["completed", "paid", "no_show", "cancelled"].includes(gig.status);
   const dist = viewer && gig.lat != null ? kmBetween(viewer, gig) : null;
   const svc = serviceLabel(gig.service);
   // Once "release now" is pressed, release_at is set to now and the payout job
@@ -93,11 +96,38 @@ export default function GigCard({ gig, me, viewer, onAction, onBadge, onEdit, on
             </div>
           )}
         </div>
-        <div className="text-right shrink-0">
-          <div className="sg-display sg-num text-xl" style={{ color: C.navy }}>${Math.round(gig.pay_cents / 100)}</div>
-          <div className="text-[10px] -mt-0.5" style={{ color: C.ink40 }}>CAD</div>
+        <div className="flex items-start gap-1 shrink-0">
+          <div className="text-right">
+            <div className="sg-display sg-num text-xl" style={{ color: C.navy }}>${Math.round(gig.pay_cents / 100)}</div>
+            <div className="text-[10px] -mt-0.5" style={{ color: C.ink40 }}>CAD</div>
+          </div>
+          {canDismiss && (
+            <button onClick={() => setConfirmDismiss(true)} title="Remove from your list" aria-label="Remove from your list"
+              className="-mr-1.5 -mt-1.5 rounded-full p-1.5 active:scale-90" style={{ color: C.ink40 }}>
+              <X size={16} />
+            </button>
+          )}
         </div>
       </div>
+
+      {/* Organizer: confirm removing a finished gig from their own list (#7) */}
+      {confirmDismiss && (
+        <div className="mt-3 rounded-lg border p-3" style={{ borderColor: C.mapleLine, backgroundColor: C.maple }}>
+          <p className="text-[12px] font-semibold" style={{ color: C.navy }}>
+            Remove this gig from your list? It just clears it from your view — the record, payout, and your scorekeeper's copy are all kept.
+          </p>
+          <div className="mt-2 flex gap-2">
+            <button disabled={busy} onClick={() => { setConfirmDismiss(false); fire("dismiss"); }}
+              className="flex-1 rounded-lg py-2 text-sm font-bold text-white disabled:opacity-50" style={{ backgroundColor: C.navy }}>
+              Yes, remove
+            </button>
+            <button onClick={() => setConfirmDismiss(false)}
+              className="flex-1 rounded-lg border py-2 text-sm font-bold" style={{ borderColor: C.mapleLine, color: C.ink60 }}>
+              Keep it
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="mt-2 flex flex-wrap gap-1.5">
         <Pill><ClipboardCheck size={10} /> {svc}</Pill>

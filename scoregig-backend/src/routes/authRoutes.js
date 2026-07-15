@@ -31,6 +31,10 @@ authRoutes.post("/signup", (req, res) => {
   const phone = (req.body.phone || "").trim().slice(0, 20) || null;
   const smsConsent = phone && req.body.smsConsent === true ? 1 : 0;
   const smsConsentAt = smsConsent ? Date.now() : null;
+  // Optional: sports orgs / associations the user is part of, chosen at signup
+  // (client joins any picks + free text into one comma-separated string). Helps
+  // organizers gauge background and match local gigs. (Jul1 #3)
+  const memberOrgs = (req.body.memberOrgs || "").trim().slice(0, 300) || null;
 
   if (!name) return res.status(400).json({ error: "Please enter your name." });
   if (!EMAIL_RE.test(email)) return res.status(400).json({ error: "Please enter a valid email." });
@@ -73,8 +77,8 @@ authRoutes.post("/signup", (req, res) => {
   const isAdmin = userCount === 0 ? 1 : 0;
 
   const info = db.prepare(
-    "INSERT INTO users (name, display_name, email, password_hash, is_adult, age_range, is_admin, phone, sms_consent, sms_consent_at, guardian_email, guardian_consent_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-  ).run(name, displayName, email, hash, isAdult, ageRange, isAdmin, phone, smsConsent, smsConsentAt, isMinorSignup ? guardianEmail : null, consentStatus);
+    "INSERT INTO users (name, display_name, email, password_hash, is_adult, age_range, is_admin, phone, sms_consent, sms_consent_at, member_orgs, guardian_email, guardian_consent_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+  ).run(name, displayName, email, hash, isAdult, ageRange, isAdmin, phone, smsConsent, smsConsentAt, memberOrgs, isMinorSignup ? guardianEmail : null, consentStatus);
 
   // Fire the guardian consent email (fire-and-forget, like notify.js — never
   // block the signup response on the email provider).

@@ -12,6 +12,17 @@ const AGE_RANGES = [
   { value: "26+",   label: "26 or older" },
 ];
 
+// Quick-pick sports orgs / associations shown at signup. Tuned for the
+// Chilliwack minor-hockey pilot — edit this list as ScoreGIG expands to new
+// regions or sports. Anything not listed goes in the "Other" field.
+const MEMBER_ORG_OPTIONS = [
+  "Chilliwack Minor Hockey",
+  "BC Hockey",
+  "Hockey Canada",
+  "Local minor sports association",
+  "School / club team",
+];
+
 export default function Login({ onAuthed }) {
   const [mode, setMode] = useState("login"); // 'login' | 'signup'
   const [firstName, setFirstName] = useState("");
@@ -24,17 +35,21 @@ export default function Login({ onAuthed }) {
   const [ageRange, setAgeRange] = useState("");
   const [guardianEmail, setGuardianEmail] = useState("");
   const [confirmAge, setConfirmAge] = useState(false);
+  const [memberOrgs, setMemberOrgs] = useState([]); // selected org chips (#3)
+  const [otherOrg, setOtherOrg] = useState("");      // free-text "Other" org (#3)
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   const [showTerms, setShowTerms] = useState(false);
+  const toggleOrg = (o) => setMemberOrgs((p) => p.includes(o) ? p.filter((x) => x !== o) : [...p, o]);
 
   const submit = async () => {
     setErr(null);
     setBusy(true);
     try {
       const path = mode === "signup" ? "/signup" : "/login";
+      const orgsJoined = [...memberOrgs, otherOrg.trim()].filter(Boolean).join(", ");
       const body = mode === "signup"
-        ? { name: `${firstName.trim()} ${lastName.trim()}`, displayName, email, password, ageRange, guardianEmail: guardianEmail.trim(), phone: phone.trim(), confirmAge, smsConsent: Boolean(phone.trim()) && smsConsent }
+        ? { name: `${firstName.trim()} ${lastName.trim()}`, displayName, email, password, ageRange, guardianEmail: guardianEmail.trim(), phone: phone.trim(), confirmAge, smsConsent: Boolean(phone.trim()) && smsConsent, memberOrgs: orgsJoined }
         : { email, password };
       const { token } = await api(path, { method: "POST", body });
       setToken(token);
@@ -177,6 +192,30 @@ export default function Login({ onAuthed }) {
                   </span>
                 </label>
               )}
+            </div>
+          )}
+
+          {mode === "signup" && (
+            <div>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide" style={{ color: C.ink60 }}>
+                Sports organizations you're part of <span style={{ color: C.ink40 }}>(optional)</span>
+              </label>
+              <p className="mb-2 text-[11px]" style={{ color: C.ink60 }}>
+                Tap any that apply. This helps organizers see your background and match you to local gigs. Add your own below.
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {MEMBER_ORG_OPTIONS.map((o) => (
+                  <button key={o} type="button" onClick={() => toggleOrg(o)}
+                    className="rounded-full border px-3 py-1.5 text-xs font-semibold"
+                    style={memberOrgs.includes(o)
+                      ? { backgroundColor: C.navy, color: "#fff", borderColor: C.navy }
+                      : { borderColor: C.mapleLine, color: C.navy }}>
+                    {o}
+                  </button>
+                ))}
+              </div>
+              <input className={`${input} mt-2`} style={{ borderColor: C.mapleLine }} value={otherOrg}
+                onChange={(e) => setOtherOrg(e.target.value)} placeholder="Other organization (optional)" maxLength={100} />
             </div>
           )}
 

@@ -171,6 +171,7 @@ export default function App() {
         issue: "Issue reported — payout paused while ScoreGIG reviews.",
         "cancel-claim": "Gig cancelled. The organizer has been refunded and notified. Heads up — cancellations show on your profile, so try to keep them rare.",
         cancel: "Gig cancelled. Your scorekeeper has been notified, and any charge was refunded to your card.",
+        dismiss: "Removed from your list.",
       };
       // Pre-approved regulars get locked in instantly instead of going pending.
       if (action === "request" && result?.instantClaim) {
