@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { C, BADGES, SPORTS } from "../theme.js";
 import { api } from "../api.js";
+import CitySearch from "./CitySearch.jsx";
 
 export default function Profile({ me, myGigs, toast, refreshMe }) {
   const paid = myGigs.filter((g) => ["completed","paid"].includes(g.status));
@@ -15,6 +16,7 @@ export default function Profile({ me, myGigs, toast, refreshMe }) {
   const initials = (me.displayName || me.name).split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase();
 
   const [editingResume, setEditingResume] = useState(false);
+  const [displayName, setDisplayName] = useState(me.displayName || me.name || "");
   const [bio, setBio] = useState(me.bio || "");
   const [experience, setExperience] = useState(me.experience || "");
   const [city, setCity] = useState(me.city || "");
@@ -41,9 +43,10 @@ export default function Profile({ me, myGigs, toast, refreshMe }) {
   };
 
   const saveResume = async () => {
+    if (!displayName.trim()) { toast("Display name can't be empty.", true); return; }
     try {
-      await api("/me/profile", { method: "PATCH", body: { bio, experience, city, gamesWorked, sports } });
-      toast("Resume updated! Organizers can see your experience now.");
+      await api("/me/profile", { method: "PATCH", body: { displayName: displayName.trim(), bio, experience, city, gamesWorked, sports } });
+      toast("Profile updated!");
       setEditingResume(false);
       refreshMe();
     } catch (e) { toast(e.message, true); }
@@ -132,6 +135,23 @@ export default function Profile({ me, myGigs, toast, refreshMe }) {
                 ? `You've cancelled ${st.recentCancellations} gigs in the last 30 days. Instant booking with your regular organizers is paused for now — you can still request gigs, and organizers will approve them manually. Your standing recovers automatically as older cancellations pass the 30-day mark.`
                 : `You've cancelled ${st.recentCancellations} gigs in the last 30 days. One more and instant booking with your regular organizers will pause temporarily. Cancellations drop off your record 30 days after they happen.`}
             </p>
+          </div>
+        );
+      })()}
+
+      {!me.payoutsEnabled && (() => {
+        // Simple 3-step progress: account created -> Stripe payouts set up -> first gig claimed.
+        const step = me.onboardingSubmitted ? 2 : 1;
+        const steps = ["Create account", "Set up payouts", "Claim a gig"];
+        return (
+          <div className="rounded-xl border bg-white p-4" style={{ borderColor: C.mapleLine }}>
+            <div className="mb-1 flex justify-between text-[11px] font-bold" style={{ color: C.navy }}>
+              <span>Step {step} of {steps.length}</span>
+              <span>{steps[step - 1]}</span>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full" style={{ backgroundColor: C.maple }}>
+              <div className="h-full rounded-full transition-all" style={{ width: `${(step / steps.length) * 100}%`, backgroundColor: C.amber }} />
+            </div>
           </div>
         );
       })()}
@@ -236,6 +256,12 @@ export default function Profile({ me, myGigs, toast, refreshMe }) {
           </div>
         ) : (
           <div className="mt-3 space-y-2">
+            <div>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide" style={{ color: C.ink60 }}>Display name</label>
+              <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} maxLength={40}
+                placeholder="Shown to organizers — never your real name unless you want it to be"
+                className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: C.mapleLine }} />
+            </div>
             {hasHistory ? (
               <div className="rounded-lg border px-3 py-2 text-[11px]" style={{ borderColor: C.mapleLine, color: C.ink60 }}>
                 You've completed {paid.length} gigs on ScoreGIG — your verified record now speaks for itself, so the "prior experience" estimate is hidden.
@@ -281,12 +307,11 @@ export default function Profile({ me, myGigs, toast, refreshMe }) {
             </div>
             <div>
               <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide" style={{ color: C.ink60 }}>Home city</label>
-              <input value={city} onChange={(e) => setCity(e.target.value)} placeholder="e.g. Calgary, AB"
-                className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: C.mapleLine }} />
+              <CitySearch value={city ? { name: city } : null} onSelect={(r) => setCity(r.name)} toast={toast} />
             </div>
             <div className="flex gap-2">
               <button onClick={saveResume} className="flex-1 rounded-lg py-2.5 font-bold text-white" style={{ backgroundColor: C.navy }}>Save resume</button>
-              <button onClick={() => { setEditingResume(false); setBio(me.bio || ""); setExperience(me.experience || ""); setCity(me.city || ""); setGamesWorked(me.gamesWorked || "0"); setSports(me.sports || []); }}
+              <button onClick={() => { setEditingResume(false); setDisplayName(me.displayName || me.name || ""); setBio(me.bio || ""); setExperience(me.experience || ""); setCity(me.city || ""); setGamesWorked(me.gamesWorked || "0"); setSports(me.sports || []); }}
                 className="rounded-lg border px-4 text-sm font-bold" style={{ borderColor: C.mapleLine, color: C.ink60 }}>Cancel</button>
             </div>
           </div>
