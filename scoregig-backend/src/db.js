@@ -2,7 +2,12 @@
 // without changing route logic much; the queries are deliberately plain.
 import Database from "better-sqlite3";
 
-export const db = new Database("scoregig.db");
+// Use the persistent disk path in production (set via DATABASE_PATH env var
+// on Render, e.g. /var/data/scoregig.db). Falls back to a local file for
+// local development so nothing breaks when the env var isn't set.
+const DB_PATH = process.env.DATABASE_PATH || "scoregig.db";
+
+export const db = new Database(DB_PATH);
 db.pragma("journal_mode = WAL");
 
 db.exec(`
