@@ -25,6 +25,7 @@ admin.get("/admin/stats", auth(), requireAdmin, (req, res) => {
   const totalGigs = db.prepare("SELECT COUNT(*) AS n FROM gigs").get().n;
   const users = db.prepare("SELECT COUNT(*) AS n FROM users").get().n;
   const openIssues = db.prepare("SELECT COUNT(*) AS n FROM issues WHERE status='open'").get().n;
+  const unreviewedFlags = db.prepare("SELECT COUNT(*) AS n FROM message_flags WHERE reviewed = 0").get().n;
 
   // Money: pay_cents is the scorekeeper's cut, fee_cents is your platform fee.
   const paid = db.prepare(
@@ -46,6 +47,7 @@ admin.get("/admin/stats", auth(), requireAdmin, (req, res) => {
     users,
     totalGigs,
     openIssues,
+    unreviewedFlags,
     notifications: {
       sent: notif.sent || 0,
       failed: notif.failed || 0,
@@ -145,5 +147,26 @@ admin.post("/admin/issues/:id/resolve", auth(), requireAdmin, async (req, res) =
 
   db.prepare("UPDATE issues SET status='resolved', outcome=?, resolution=?, resolved_at=? WHERE id=?")
     .run(outcome, note, Date.now(), issue.id);
+  res.json({ ok: true });
+});
+
+/* --------------------------- FLAGGED MESSAGES ------------------------------ */
+// Chat messages the profanity filter blocked before they were ever sent.
+// Nothing to "resolve" here — just a visibility trail so the platform owner
+// can see if someone's being abusive. Unreviewed first, most recent first.
+admin.get("/admin/message-flags", auth(), requireAdmin, (req, res) => {
+  const rows = db.prepare(`
+    SELECT f.*, g.title AS gig_title, u.display_name AS user_name
+    FROM message_flags f
+    JOIN gigs g ON g.id = f.gig_id
+    JOIN users u ON u.id = f.user_id
+    ORDER BY f.reviewed ASC, f.created_at DESC
+    LIMIT 200
+  `).all();
+  res.json(rows);
+});
+
+admin.post("/admin/message-flags/:id/review", auth(), requireAdmin, (req, res) => {
+  db.prepare("UPDATE message_flags SET reviewed = 1 WHERE id = ?").run(req.params.id);
   res.json({ ok: true });
 });

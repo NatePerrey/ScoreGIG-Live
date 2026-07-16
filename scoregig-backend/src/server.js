@@ -14,7 +14,9 @@ import { accounts } from "./routes/accounts.js";
 import { gigs } from "./routes/gigs.js";
 import { authRoutes } from "./routes/authRoutes.js";
 import { admin } from "./routes/admin.js";
+import { messages } from "./routes/messages.js";
 import { startReleaseJob, releaseDuePayments } from "./jobs/release.js";
+import { startMessageCleanupJob } from "./jobs/cleanupMessages.js";
 import { applyInboundSms, verifyTwilioSignature } from "./notify.js";
 import { userByConsentToken, confirmConsent } from "./guardian.js";
 
@@ -168,6 +170,7 @@ app.use("/api", authRoutes);
 app.use("/api", accounts);
 app.use("/api", gigs);
 app.use("/api", admin);
+app.use("/api", messages);
 
 // Internal payout trigger for external schedulers (cron / cloud scheduler).
 // Protect with a shared secret in the x-internal-secret header. Only useful when
@@ -191,4 +194,5 @@ const port = process.env.PORT || 4000;
 app.listen(port, () => {
   console.log(`ScoreGIG API running on http://localhost:${port}`);
   startReleaseJob();
+  startMessageCleanupJob();
 });

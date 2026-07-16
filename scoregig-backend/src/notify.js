@@ -148,6 +148,30 @@ export function notifyGigState(gigId, stateLabel, extraUserIds = []) {
   _run(gigId, stateLabel, extraUserIds).catch((e) => console.error("notify error:", e.message));
 }
 
+/**
+ * Notify one recipient that a new gig-chat message arrived. Separate from
+ * notifyGigState because it's addressed to one person (not everyone on the
+ * gig) and carries its own short body instead of a state-change sentence.
+ * @param {number} gigId
+ * @param {number} recipientUserId
+ * @param {string} senderName  the sender's display name
+ */
+export function notifyNewMessage(gigId, recipientUserId, senderName) {
+  _runMessage(gigId, recipientUserId, senderName).catch((e) => console.error("notify (message) error:", e.message));
+}
+
+async function _runMessage(gigId, recipientUserId, senderName) {
+  const gig = db.prepare("SELECT * FROM gigs WHERE id = ?").get(gigId);
+  if (!gig) return;
+  const user = db
+    .prepare("SELECT id, email, phone, notifications_enabled, sms_consent, sms_opted_out FROM users WHERE id = ?")
+    .get(recipientUserId);
+  if (!user || !user.notifications_enabled) return;
+  const body = `New message from ${senderName} re: ${gig.title}`;
+  await sendEmail(user, gig, "New message", body);
+  await sendSMS(user, gig, "New message", body);
+}
+
 async function _run(gigId, stateLabel, extraUserIds) {
   const gig = db.prepare("SELECT * FROM gigs WHERE id = ?").get(gigId);
   if (!gig) return;

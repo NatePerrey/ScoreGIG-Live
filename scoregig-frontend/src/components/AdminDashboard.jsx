@@ -94,10 +94,49 @@ function IssueCard({ issue, onResolved, toast }) {
   );
 }
 
+function FlagCard({ flag, onReviewed, toast }) {
+  const [busy, setBusy] = useState(false);
+
+  const markReviewed = async () => {
+    setBusy(true);
+    try {
+      await api(`/admin/message-flags/${flag.id}/review`, { method: "POST" });
+      onReviewed();
+    } catch (e) { toast(e.message, true); }
+    setBusy(false);
+  };
+
+  return (
+    <div className="rounded-xl border bg-white p-3" style={{ borderColor: flag.reviewed ? C.mapleLine : C.red }}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5">
+            {!flag.reviewed && <AlertTriangle size={13} color={C.red} />}
+            <span className="truncate font-bold text-sm" style={{ color: C.navy }}>{flag.gig_title}</span>
+          </div>
+          <div className="mt-0.5 text-[11px]" style={{ color: C.ink60 }}>
+            {flag.user_name} · {fmtDT(flag.created_at)}
+          </div>
+          <p className="mt-1 text-[12px] italic" style={{ color: C.navy }}>"{flag.attempted_body}"</p>
+          <div className="mt-1 text-[10px]" style={{ color: C.ink40 }}>Blocked — never delivered to the other person.</div>
+        </div>
+        {!flag.reviewed && (
+          <button disabled={busy} onClick={markReviewed}
+            className="shrink-0 rounded-lg border px-2.5 py-1.5 text-xs font-bold disabled:opacity-50"
+            style={{ borderColor: C.mapleLine, color: C.ink60 }}>
+            {busy ? "…" : "Mark reviewed"}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function AdminDashboard({ toast }) {
   const [stats, setStats] = useState(null);
   const [gigs, setGigs] = useState([]);
   const [issues, setIssues] = useState([]);
+  const [flags, setFlags] = useState([]);
   const [tab, setTab] = useState("overview");
   const [cityFilter, setCityFilter] = useState("all");
 
@@ -105,6 +144,7 @@ export default function AdminDashboard({ toast }) {
     api("/admin/stats").then(setStats).catch((e) => toast(e.message, true));
     api("/admin/gigs").then(setGigs).catch(() => {});
     api("/admin/issues").then(setIssues).catch(() => {});
+    api("/admin/message-flags").then(setFlags).catch(() => {});
   }, [toast]);
 
   useEffect(() => { load(); }, [load]);
@@ -114,6 +154,8 @@ export default function AdminDashboard({ toast }) {
   const s = stats.gigsByStatus;
   const openIssues = issues.filter((i) => i.status === "open");
   const resolvedIssues = issues.filter((i) => i.status === "resolved");
+  const unreviewedFlags = flags.filter((f) => !f.reviewed);
+  const reviewedFlags = flags.filter((f) => f.reviewed);
 
   const cards = [
     ["Users", stats.users],
@@ -138,7 +180,7 @@ export default function AdminDashboard({ toast }) {
 
       {/* Sub-tabs */}
       <div className="flex rounded-lg p-1" style={{ backgroundColor: C.maple }}>
-        {[["overview", "Overview"], ["issues", `Issues${stats.openIssues > 0 ? ` (${stats.openIssues})` : ""}`], ["gigs", "Recent gigs"]].map(([key, label]) => (
+        {[["overview", "Overview"], ["issues", `Issues${stats.openIssues > 0 ? ` (${stats.openIssues})` : ""}`], ["flags", `Flags${unreviewedFlags.length > 0 ? ` (${unreviewedFlags.length})` : ""}`], ["gigs", "Recent gigs"]].map(([key, label]) => (
           <button key={key} onClick={() => setTab(key)}
             className="flex-1 rounded-md py-1.5 text-xs font-bold"
             style={tab === key ? { backgroundColor: C.navy, color: "#fff" } : { color: C.navy }}>
@@ -177,6 +219,12 @@ export default function AdminDashboard({ toast }) {
               style={{ borderColor: C.mapleLine }}>
               <div className="sg-display sg-num text-2xl" style={{ color: C.navy }}>{resolvedIssues.length}</div>
               <div className="text-[10px] uppercase tracking-wide" style={{ color: C.ink60 }}>Resolved</div>
+            </div>
+            <div className="rounded-xl border p-3 text-center cursor-pointer"
+              onClick={() => setTab("flags")}
+              style={{ borderColor: unreviewedFlags.length > 0 ? C.red : C.mapleLine, backgroundColor: unreviewedFlags.length > 0 ? "#FFF0F0" : "#fff" }}>
+              <div className="sg-display sg-num text-2xl" style={{ color: unreviewedFlags.length > 0 ? C.red : C.navy }}>{unreviewedFlags.length}</div>
+              <div className="text-[10px] uppercase tracking-wide" style={{ color: unreviewedFlags.length > 0 ? C.red : C.ink60 }}>Blocked messages</div>
             </div>
           </div>
           <div className="rounded-xl p-4 text-white" style={{ backgroundColor: C.navy }}>
@@ -249,6 +297,37 @@ export default function AdminDashboard({ toast }) {
                 Resolved ({resolvedIssues.length})
               </div>
               {resolvedIssues.map((i) => <IssueCard key={i.id} issue={i} onResolved={load} toast={toast} />)}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* FLAGGED MESSAGES — chat attempts the profanity filter blocked */}
+      {tab === "flags" && (
+        <div className="space-y-2">
+          {flags.length === 0 && (
+            <div className="rounded-xl border bg-white p-6 text-center text-sm" style={{ borderColor: C.mapleLine, color: C.ink60 }}>
+              No blocked messages — nothing to see here.
+            </div>
+          )}
+          {unreviewedFlags.length > 0 && (
+            <div>
+              <div className="mb-1.5 text-[10px] font-bold uppercase tracking-wide" style={{ color: C.red }}>
+                Unreviewed ({unreviewedFlags.length})
+              </div>
+              {unreviewedFlags.map((f) => (
+                <FlagCard key={f.id} flag={f} onReviewed={load} toast={toast} />
+              ))}
+            </div>
+          )}
+          {reviewedFlags.length > 0 && (
+            <div>
+              <div className="mb-1.5 mt-3 text-[10px] font-bold uppercase tracking-wide" style={{ color: C.ink40 }}>
+                Reviewed ({reviewedFlags.length})
+              </div>
+              {reviewedFlags.map((f) => (
+                <FlagCard key={f.id} flag={f} onReviewed={load} toast={toast} />
+              ))}
             </div>
           )}
         </div>

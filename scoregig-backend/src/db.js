@@ -134,6 +134,30 @@ CREATE TABLE IF NOT EXISTS notifications (
   detail TEXT,
   t INTEGER NOT NULL
 );
+
+-- Gig-scoped chat between the organizer and their scorekeeper. Auto-deleted
+-- after 60 days by jobs/cleanupMessages.js. ScoreGIG retains access during
+-- that window for dispute resolution per the terms both users agreed to.
+CREATE TABLE IF NOT EXISTS messages (
+  id INTEGER PRIMARY KEY,
+  gig_id INTEGER NOT NULL REFERENCES gigs(id),
+  sender_id INTEGER NOT NULL REFERENCES users(id),
+  body TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_messages_gig ON messages(gig_id, id);
+
+-- A message that got blocked by the profanity filter before it ever reached
+-- the other person. Kept so the platform owner can see a pattern of abuse
+-- even though nothing was actually delivered. reviewed lets admin clear it.
+CREATE TABLE IF NOT EXISTS message_flags (
+  id INTEGER PRIMARY KEY,
+  gig_id INTEGER NOT NULL REFERENCES gigs(id),
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  attempted_body TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  reviewed INTEGER NOT NULL DEFAULT 0
+);
 `);
 
 // --- Lightweight additive migrations -------------------------------------

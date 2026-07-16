@@ -6,6 +6,7 @@ import { Clock, MapPin, CheckCircle2, AlertTriangle, Trophy, Pencil, Eye, Ban, T
 import { C, GIG_TYPES, MIN, fmtDT, fmtT, fmtDuration, serviceLabel, startTerm, endTerm, kmBetween, fmtKm } from "../theme.js";
 import { Pill, BadgeChip, PayTimeline } from "./ui.jsx";
 import TipPanel from "./TipPanel.jsx";
+import GigMessages from "./GigMessages.jsx";
 
 export default function GigCard({ gig, me, viewer, onAction, onBadge, onEdit, onViewResume, onReportIssue, toast }) {
   const now = Date.now();
@@ -49,6 +50,11 @@ export default function GigCard({ gig, me, viewer, onAction, onBadge, onEdit, on
   // fires within ~60s. Detect that so the button shows as already pressed and
   // can't be clicked again while we wait for it to flip to "paid".
   const releaseRequested = gig.status === "completed" && gig.release_at && gig.release_at <= now;
+  // Chat is available once there's an actual counterparty on this gig —
+  // either a scorekeeper has requested/claimed it, or (from their side)
+  // there's an organizer to talk to. Stays open through completion/payout
+  // so logistics or dispute-related messages can still be sent.
+  const canMessage = (ownedByMe && (gig.claimed_by || gig.requested_by)) || claimedByMe || requestedByMe;
 
   const statusPill = {
     open: ["Open", C.navy, C.maple],
@@ -328,6 +334,9 @@ export default function GigCard({ gig, me, viewer, onAction, onBadge, onEdit, on
       {ownedByMe && ["completed","paid"].includes(gig.status) && toast && (
         <TipPanel gig={gig} toast={toast} onTipped={() => onAction && null} />
       )}
+
+      {/* Gig-scoped chat between organizer and scorekeeper */}
+      {canMessage && toast && <GigMessages gig={gig} me={me} toast={toast} />}
     </div>
   );
 }
