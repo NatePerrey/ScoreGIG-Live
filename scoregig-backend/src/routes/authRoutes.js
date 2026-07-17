@@ -6,6 +6,7 @@ import { signToken, auth, isMinor } from "../auth.js";
 import { cancellationStanding } from "../reliability.js";
 import { checkClean } from "../clean.js";
 import { issueConsentToken, sendGuardianConsentEmail } from "../guardian.js";
+import { issueResetToken, sendPasswordResetEmail } from "../passwordReset.js";
 
 export const authRoutes = Router();
 
@@ -103,6 +104,24 @@ authRoutes.post("/login", (req, res) => {
     return res.status(401).json({ error: "Incorrect email or password." });
   }
   res.json({ token: signToken(user.id) });
+});
+
+/* ---------------------------- FORGOT PASSWORD ---------------------------- */
+// Body: { email }. Always responds the same way whether or not the account
+// exists, so this can't be used to probe which emails are registered. When the
+// account does exist, we email a single-use reset link (fire-and-forget, so the
+// email provider never blocks or slows the response).
+authRoutes.post("/forgot-password", (req, res) => {
+  const email = (req.body.email || "").trim().toLowerCase();
+  if (EMAIL_RE.test(email)) {
+    const user = db.prepare("SELECT * FROM users WHERE lower(email) = ?").get(email);
+    if (user) {
+      issueResetToken(user.id);
+      const fresh = db.prepare("SELECT * FROM users WHERE id = ?").get(user.id);
+      sendPasswordResetEmail(fresh).catch((e) => console.error("reset email error:", e.message));
+    }
+  }
+  res.json({ ok: true });
 });
 
 /* -------------------------------- WHO AM I ------------------------------- */

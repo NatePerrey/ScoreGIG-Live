@@ -19,6 +19,8 @@ import { startReleaseJob, releaseDuePayments } from "./jobs/release.js";
 import { startMessageCleanupJob } from "./jobs/cleanupMessages.js";
 import { applyInboundSms, verifyTwilioSignature } from "./notify.js";
 import { userByConsentToken, confirmConsent } from "./guardian.js";
+import { userByResetToken, applyResetHash } from "./passwordReset.js";
+import bcrypt from "bcryptjs";
 
 const app = express();
 
@@ -186,6 +188,92 @@ app.post("/guardian-consent/:token/confirm", express.urlencoded({ extended: fals
     heading: "Thank you — consent confirmed",
     message: "Your child's ScoreGIG account is now active and they can pick up paid scorekeeping gigs. You can close this page. If you have any questions, just reply to the email we sent you.",
     showButton: false,
+  }));
+});
+
+/* ---------------------- PASSWORD RESET (server-rendered) ------------------ */
+// The link in the reset email opens these pages directly. Server-rendered so it
+// works without the SPA, mirroring the guardian-consent flow. GET shows a form
+// to set a new password; POST validates the token, saves the new password, and
+// clears the single-use token.
+function resetPage({ title, heading, message, token, error }) {
+  const form = token
+    ? `<form method="POST" action="/reset-password/${token}" style="margin-top:20px">
+         <label style="display:block;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;color:#6b6b6b;margin-bottom:6px">New password</label>
+         <input type="password" name="password" minlength="8" required autofocus placeholder="At least 8 characters"
+           style="width:100%;box-sizing:border-box;border:1px solid #E7D9BC;border-radius:10px;padding:12px;font-size:15px" />
+         <label style="display:block;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;color:#6b6b6b;margin:14px 0 6px">Confirm new password</label>
+         <input type="password" name="confirm" minlength="8" required placeholder="Re-enter your new password"
+           style="width:100%;box-sizing:border-box;border:1px solid #E7D9BC;border-radius:10px;padding:12px;font-size:15px" />
+         ${error ? `<p style="color:#C0392B;font-size:13px;font-weight:600;margin:14px 0 0">${error}</p>` : ""}
+         <button type="submit" style="margin-top:20px;background:#F5A800;color:#16243D;border:none;border-radius:10px;padding:14px 22px;font-size:16px;font-weight:800;cursor:pointer;width:100%">Set new password</button>
+       </form>`
+    : "";
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>${title}</title></head>
+    <body style="margin:0;background:#16243D;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px">
+      <div style="max-width:440px;width:100%;background:#fff;border-radius:18px;padding:28px">
+        <div style="font-size:30px;font-weight:900;letter-spacing:0.5px;color:#16243D;text-align:center">SCORE<span style="color:#F5A800">GIG</span></div>
+        <h1 style="font-size:19px;color:#16243D;margin:20px 0 8px">${heading}</h1>
+        <p style="font-size:14px;line-height:1.5;color:#3a3a3a;margin:0">${message}</p>
+        ${form}
+      </div>
+    </body></html>`;
+}
+
+app.get("/reset-password/:token", (req, res) => {
+  const found = userByResetToken(req.params.token);
+  if (!found || found.expired) {
+    return res.status(found?.expired ? 410 : 404).send(resetPage({
+      title: "ScoreGIG — reset link unavailable",
+      heading: found?.expired ? "This link has expired" : "This link isn't valid",
+      message: "Password reset links expire after 1 hour and can only be used once. Please head back to ScoreGIG and request a new reset link.",
+    }));
+  }
+  res.send(resetPage({
+    title: "ScoreGIG — reset your password",
+    heading: "Choose a new password",
+    message: "Enter a new password for your ScoreGIG account below. You'll use it to log in from now on.",
+    token: req.params.token,
+  }));
+});
+
+app.post("/reset-password/:token", express.urlencoded({ extended: false }), (req, res) => {
+  const found = userByResetToken(req.params.token);
+  if (!found || found.expired) {
+    return res.status(found?.expired ? 410 : 404).send(resetPage({
+      title: "ScoreGIG — reset link unavailable",
+      heading: found?.expired ? "This link has expired" : "This link isn't valid",
+      message: "Password reset links expire after 1 hour and can only be used once. Please head back to ScoreGIG and request a new reset link.",
+    }));
+  }
+  const password = req.body.password || "";
+  const confirm = req.body.confirm || "";
+  if (password.length < 8) {
+    return res.status(400).send(resetPage({
+      title: "ScoreGIG — reset your password",
+      heading: "Choose a new password",
+      message: "Enter a new password for your ScoreGIG account below.",
+      token: req.params.token,
+      error: "Password must be at least 8 characters.",
+    }));
+  }
+  if (password !== confirm) {
+    return res.status(400).send(resetPage({
+      title: "ScoreGIG — reset your password",
+      heading: "Choose a new password",
+      message: "Enter a new password for your ScoreGIG account below.",
+      token: req.params.token,
+      error: "Those passwords don't match. Please re-enter them.",
+    }));
+  }
+  const hash = bcrypt.hashSync(password, 10);
+  applyResetHash(found.user.id, hash);
+  res.send(resetPage({
+    title: "ScoreGIG — password updated",
+    heading: "Password updated",
+    message: "Your password has been changed. You can close this page and log in to ScoreGIG with your new password.",
   }));
 });
 

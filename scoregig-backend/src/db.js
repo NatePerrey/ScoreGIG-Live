@@ -192,6 +192,11 @@ addColumn("ALTER TABLE users ADD COLUMN guardian_consent_expires INTEGER");     
 addColumn("ALTER TABLE users ADD COLUMN guardian_consent_at INTEGER");          // when guardian confirmed
 addColumn("ALTER TABLE users ADD COLUMN guardian_consent_ip TEXT");             // IP that confirmed (audit trail)
 
+// Password reset: a single-use token emailed to the account holder. Cleared on
+// use or expiry. Mirrors the guardian-consent token approach.
+addColumn("ALTER TABLE users ADD COLUMN reset_token TEXT");     // single-use password reset token
+addColumn("ALTER TABLE users ADD COLUMN reset_expires INTEGER"); // token expiry (ms epoch)
+
 export function logEvent(gigId, kind, label) {
   db.prepare(
     "INSERT INTO gig_events (gig_id, t, kind, label) VALUES (?, ?, ?, ?)"

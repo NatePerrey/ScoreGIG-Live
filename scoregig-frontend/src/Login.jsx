@@ -39,6 +39,7 @@ export default function Login({ onAuthed }) {
   const [otherOrg, setOtherOrg] = useState("");      // free-text "Other" org (#3)
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
+  const [notice, setNotice] = useState(null); // info message, e.g. "reset link sent"
   const [showTerms, setShowTerms] = useState(false);
   const toggleOrg = (o) => setMemberOrgs((p) => p.includes(o) ? p.filter((x) => x !== o) : [...p, o]);
 
@@ -60,9 +61,28 @@ export default function Login({ onAuthed }) {
     setBusy(false);
   };
 
+  // Forgot password: ask the backend to email a reset link. The response is the
+  // same whether or not the email exists, so we always show the same message.
+  const sendReset = async () => {
+    setErr(null);
+    setNotice(null);
+    setBusy(true);
+    try {
+      await api("/forgot-password", { method: "POST", body: { email: email.trim() } });
+      setNotice("If an account exists for that email, we've sent a password reset link. Check your inbox (and your spam folder) — the link expires in 1 hour.");
+    } catch (e) {
+      setErr(e.message);
+    }
+    setBusy(false);
+  };
+
+  const goMode = (m) => { setMode(m); setErr(null); setNotice(null); };
+
   const input = "w-full rounded-lg border px-3 py-2.5 text-sm";
   const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  const canSubmit = mode === "signup"
+  const canSubmit = mode === "forgot"
+    ? emailRe.test(email.trim())
+    : mode === "signup"
     ? firstName.trim() && lastName.trim() && email && password.length >= 8 && ageRange
       && (ageRange !== "15-17" || (confirmAge && emailRe.test(guardianEmail.trim())))
     : email && password;
@@ -79,15 +99,26 @@ export default function Login({ onAuthed }) {
 
         <div className="space-y-3 rounded-2xl bg-white p-5">
           {/* Tab switch */}
-          <div className="flex rounded-lg p-1" style={{ backgroundColor: C.maple }}>
-            {[["login", "Log in"], ["signup", "Sign up"]].map(([m, label]) => (
-              <button key={m} onClick={() => { setMode(m); setErr(null); }}
-                className="flex-1 rounded-md py-1.5 text-sm font-bold transition-colors"
-                style={mode === m ? { backgroundColor: C.navy, color: "#fff" } : { color: C.navy }}>
-                {label}
-              </button>
-            ))}
-          </div>
+          {mode !== "forgot" && (
+            <div className="flex rounded-lg p-1" style={{ backgroundColor: C.maple }}>
+              {[["login", "Log in"], ["signup", "Sign up"]].map(([m, label]) => (
+                <button key={m} onClick={() => goMode(m)}
+                  className="flex-1 rounded-md py-1.5 text-sm font-bold transition-colors"
+                  style={mode === m ? { backgroundColor: C.navy, color: "#fff" } : { color: C.navy }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {mode === "forgot" && (
+            <div>
+              <h2 className="text-base font-bold" style={{ color: C.navy }}>Reset your password</h2>
+              <p className="mt-1 text-[12px]" style={{ color: C.ink60 }}>
+                Enter the email on your account and we'll send you a link to set a new password.
+              </p>
+            </div>
+          )}
 
           {mode === "signup" && (
             <div className="flex gap-2">
@@ -126,11 +157,21 @@ export default function Login({ onAuthed }) {
               onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" autoCapitalize="none" />
           </div>
 
-          <div>
-            <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide" style={{ color: C.ink60 }}>Password</label>
-            <input className={input} style={{ borderColor: C.mapleLine }} type="password" value={password}
-              onChange={(e) => setPassword(e.target.value)} placeholder={mode === "signup" ? "At least 8 characters" : "Your password"} />
-          </div>
+          {mode !== "forgot" && (
+            <div>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide" style={{ color: C.ink60 }}>Password</label>
+              <input className={input} style={{ borderColor: C.mapleLine }} type="password" value={password}
+                onChange={(e) => setPassword(e.target.value)} placeholder={mode === "signup" ? "At least 8 characters" : "Your password"} />
+              {mode === "login" && (
+                <div className="mt-1.5 text-right">
+                  <button type="button" onClick={() => goMode("forgot")}
+                    className="text-[11px] font-semibold underline" style={{ color: C.navy }}>
+                    Forgot password?
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           {mode === "signup" && (
             <div>
@@ -225,17 +266,31 @@ export default function Login({ onAuthed }) {
             </div>
           )}
 
-          <button disabled={!canSubmit || busy} onClick={submit}
+          {notice && (
+            <div className="rounded-lg border p-2.5 text-xs font-semibold" style={{ backgroundColor: C.maple, borderColor: C.mapleLine, color: C.navy }}>
+              {notice}
+            </div>
+          )}
+
+          <button disabled={!canSubmit || busy} onClick={mode === "forgot" ? sendReset : submit}
             className="w-full rounded-lg py-2.5 font-bold disabled:opacity-40"
             style={{ backgroundColor: C.amber, color: C.navy }}>
-            {busy ? "Please wait…" : mode === "signup" ? "Create account" : "Log in"}
+            {busy ? "Please wait…" : mode === "signup" ? "Create account" : mode === "forgot" ? "Send reset link" : "Log in"}
           </button>
 
-          <p className="text-center text-[11px]" style={{ color: C.ink60 }}>
-            {mode === "signup"
-              ? "One account lets you post gigs and pick up scorekeeping work."
-              : "Welcome back!"}
-          </p>
+          {mode === "forgot" ? (
+            <p className="text-center text-[11px]" style={{ color: C.ink60 }}>
+              <button type="button" onClick={() => goMode("login")} className="font-semibold underline" style={{ color: C.navy }}>
+                ← Back to log in
+              </button>
+            </p>
+          ) : (
+            <p className="text-center text-[11px]" style={{ color: C.ink60 }}>
+              {mode === "signup"
+                ? "One account lets you post gigs and pick up scorekeeping work."
+                : "Welcome back!"}
+            </p>
+          )}
           <p className="text-center text-[11px]" style={{ color: C.ink60 }}>
             By continuing you agree to our{" "}
             <button onClick={() => setShowTerms(true)} className="font-semibold underline" style={{ color: C.navy }}>
