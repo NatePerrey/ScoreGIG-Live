@@ -13,6 +13,7 @@ export default function GigCard({ gig, me, viewer, onAction, onBadge, onEdit, on
   const [confirmCancel, setConfirmCancel] = useState(false); // scorekeeper cancelling their claim
   const [confirmOwnerCancel, setConfirmOwnerCancel] = useState(false); // organizer cancelling the gig
   const [confirmDismiss, setConfirmDismiss] = useState(false); // organizer removing a finished gig from their list (#7)
+  const [confirmApprove, setConfirmApprove] = useState(false); // organizer confirming the charge before approving
   const [busy, setBusy] = useState(false); // prevents double-clicks on action buttons
 
   // Run an action once: disable buttons while it's in flight so a fast double-tap
@@ -30,6 +31,10 @@ export default function GigCard({ gig, me, viewer, onAction, onBadge, onEdit, on
   const requestedByMe = gig.requested_by === me.id;
   const ended = now >= gig.start_at + gig.duration_min * MIN;
   const term = startTerm(gig.sport);
+  // Exact dollar formatting for the charge breakdown (needs the cents, unlike
+  // the rounded headline pay figure shown elsewhere on the card).
+  const fmtMoney = (cents) => `$${((cents || 0) / 100).toFixed(2)}`;
+  const chargeTotalCents = (gig.pay_cents || 0) + (gig.fee_cents || 0);
 
   const canEdit = ownedByMe && gig.status === "open";
   const canArrive = claimedByMe && gig.status === "claimed" && now >= gig.start_at - 20 * MIN;
@@ -241,16 +246,48 @@ export default function GigCard({ gig, me, viewer, onAction, onBadge, onEdit, on
               <p className="mt-1 text-[11px]" style={{ color: C.ink60 }}>
                 Review who they are, then approve to lock them in (your card is charged on approval) or decline to reopen the gig.
               </p>
-              <div className="mt-2 flex gap-2">
-                <button disabled={busy} onClick={() => fire("approve")}
-                  className="flex-1 rounded-lg py-2 text-sm font-bold text-white disabled:opacity-50" style={{ backgroundColor: C.green }}>
-                  {busy ? "Working\u2026" : "Approve"}
-                </button>
-                <button disabled={busy} onClick={() => fire("decline")}
-                  className="flex-1 rounded-lg border py-2 text-sm font-bold disabled:opacity-50" style={{ borderColor: C.red, color: C.red }}>
-                  Decline
-                </button>
-              </div>
+              {!confirmApprove ? (
+                <div className="mt-2 flex gap-2">
+                  <button disabled={busy} onClick={() => setConfirmApprove(true)}
+                    className="flex-1 rounded-lg py-2 text-sm font-bold text-white disabled:opacity-50" style={{ backgroundColor: C.green }}>
+                    Approve
+                  </button>
+                  <button disabled={busy} onClick={() => fire("decline")}
+                    className="flex-1 rounded-lg border py-2 text-sm font-bold disabled:opacity-50" style={{ borderColor: C.red, color: C.red }}>
+                    Decline
+                  </button>
+                </div>
+              ) : (
+                <div className="mt-2 rounded-lg border p-3" style={{ borderColor: C.mapleLine, backgroundColor: C.maple }}>
+                  <div className="text-[12px] font-bold" style={{ color: C.navy }}>
+                    You'll be charged now
+                  </div>
+                  <div className="mt-2 space-y-1 text-[13px]" style={{ color: C.navy }}>
+                    <div className="flex items-center justify-between">
+                      <span style={{ color: C.ink60 }}>Scorekeeper payment</span>
+                      <span className="sg-num font-semibold">{fmtMoney(gig.pay_cents)}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span style={{ color: C.ink60 }}>Platform &amp; processing fees</span>
+                      <span className="sg-num font-semibold">{fmtMoney(gig.fee_cents)}</span>
+                    </div>
+                    <div className="mt-1 flex items-center justify-between border-t pt-1.5" style={{ borderColor: C.mapleLine }}>
+                      <span className="font-bold">Total</span>
+                      <span className="sg-num font-bold">{fmtMoney(chargeTotalCents)}</span>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex gap-2">
+                    <button disabled={busy} onClick={() => fire("approve")}
+                      className="flex-1 rounded-lg py-2 text-sm font-bold text-white disabled:opacity-50" style={{ backgroundColor: C.green }}>
+                      {busy ? "Charging\u2026" : "Approve & charge card"}
+                    </button>
+                    <button disabled={busy} onClick={() => setConfirmApprove(false)}
+                      className="rounded-lg border px-3 py-2 text-sm font-bold disabled:opacity-50" style={{ borderColor: C.mapleLine, color: C.ink60 }}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
           {canNoShow && (

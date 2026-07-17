@@ -21,7 +21,32 @@ import { applyInboundSms, verifyTwilioSignature } from "./notify.js";
 import { userByConsentToken, confirmConsent } from "./guardian.js";
 
 const app = express();
-app.use(cors({ origin: process.env.APP_URL }));
+
+// Allowed browser origins for API calls. Covers the custom domain (apex + www),
+// the Render frontend URL, and local dev. APP_URL and an optional comma-separated
+// EXTRA_ORIGINS env var can add more without a code change. Requests with no
+// Origin header (mobile apps, curl, Stripe webhooks) are allowed through.
+const allowedOrigins = new Set(
+  [
+    process.env.APP_URL,
+    "https://scoregig.ca",
+    "https://www.scoregig.ca",
+    "https://scoregig-frontend.onrender.com",
+    "http://localhost:5173",
+    ...(process.env.EXTRA_ORIGINS ? process.env.EXTRA_ORIGINS.split(",") : []),
+  ]
+    .filter(Boolean)
+    .map((o) => o.trim().replace(/\/+$/, ""))
+);
+
+app.use(
+  cors({
+    origin(origin, cb) {
+      if (!origin) return cb(null, true); // no Origin header: mobile/curl/webhooks
+      cb(null, allowedOrigins.has(origin.replace(/\/+$/, "")));
+    },
+  })
+);
 
 /* ----------------------------- WEBHOOKS ---------------------------------- */
 // MUST be registered before express.json() — Stripe signature verification
