@@ -102,7 +102,7 @@ function GameForm({ game, idx, onChange, onRemove, canRemove, lbl, input, toast,
 
 export default function PostGig({ initial, onSubmit, onCancel, toast }) {
   const editing = !!initial;
-  const [title, setTitle] = useState(initial?.title?.replace(/ — Game \d+$/, "") || "");
+  const [title, setTitle] = useState(initial?.title?.replace(/ \u2014 Game \d+$/, "") || "");
   const [sport, setSport] = useState(initial?.sport || "Basketball");
   const [otherSport, setOtherSport] = useState("");
   const [type, setType] = useState(initial?.type || "single");
