@@ -7,9 +7,8 @@ import { api, setToken } from "./api.js";
 import TermsModal from "./components/TermsModal.jsx";
 
 const AGE_RANGES = [
-  { value: "15-17", label: "15–17" },
-  { value: "18-25", label: "18–25" },
-  { value: "26+",   label: "26 or older" },
+  { value: "under18", label: "Under 18" },
+  { value: "over18",  label: "18 and over" },
 ];
 
 // Quick-pick sports orgs / associations shown at signup. Tuned for the
@@ -84,7 +83,7 @@ export default function Login({ onAuthed }) {
     ? emailRe.test(email.trim())
     : mode === "signup"
     ? firstName.trim() && lastName.trim() && email && password.length >= 8 && ageRange
-      && (ageRange !== "15-17" || (confirmAge && emailRe.test(guardianEmail.trim())))
+      && (ageRange !== "under18" || (confirmAge && emailRe.test(guardianEmail.trim())))
     : email && password;
 
   return (
@@ -209,12 +208,12 @@ export default function Login({ onAuthed }) {
                   </button>
                 ))}
               </div>
-              {ageRange === "15-17" && (
+              {ageRange === "under18" && (
                 <p className="mt-1.5 text-[11px]" style={{ color: C.ink60 }}>
                   You're welcome here! Based on Stripe's payment policies, anyone under 18 needs a parent or guardian to complete payout setup and receive earnings on their behalf. It's a Stripe requirement to protect minors — not a ScoreGIG rule. You can still build your profile and request gigs.
                 </p>
               )}
-              {ageRange === "15-17" && (
+              {ageRange === "under18" && (
                 <div className="mt-2.5">
                   <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide" style={{ color: C.ink60 }}>Parent / guardian email *</label>
                   <input className={input} style={{ borderColor: C.mapleLine }} type="email" value={guardianEmail}
@@ -224,7 +223,7 @@ export default function Login({ onAuthed }) {
                   </p>
                 </div>
               )}
-              {ageRange === "15-17" && (
+              {ageRange === "under18" && (
                 <label className="mt-2.5 flex items-start gap-2 cursor-pointer">
                   <input type="checkbox" checked={confirmAge} onChange={(e) => setConfirmAge(e.target.checked)}
                     className="mt-0.5 h-4 w-4 flex-shrink-0" />

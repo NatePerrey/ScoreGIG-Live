@@ -10,33 +10,9 @@ import CitySearch from "./CitySearch.jsx";
 const POSTED_AS = ["Parent", "Team Manager", "Coach", "Tournament Coordinator", "Association Admin"];
 const SERVICE_LIST = Object.values(SERVICES);
 
-// Provinces/territories for the pay-floor selector. Rates themselves come from
-// the backend (/min-wage) so the floor the form shows always matches what the
-// server enforces.
-const PROVINCES = [
-  ["BC", "British Columbia"], ["AB", "Alberta"], ["SK", "Saskatchewan"], ["MB", "Manitoba"],
-  ["ON", "Ontario"], ["QC", "Quebec"], ["NB", "New Brunswick"], ["NS", "Nova Scotia"],
-  ["PE", "Prince Edward Island"], ["NL", "Newfoundland and Labrador"],
-  ["YT", "Yukon"], ["NT", "Northwest Territories"], ["NU", "Nunavut"],
-];
-const PROV_PATTERNS = [
-  ["BC", /british columbia|colombie-britannique/i], ["AB", /alberta/i], ["SK", /saskatchewan/i],
-  ["MB", /manitoba/i], ["ON", /ontario/i], ["QC", /quebec|québec/i],
-  ["NB", /new brunswick|nouveau-brunswick/i], ["NS", /nova scotia|nouvelle-écosse/i],
-  ["PE", /prince edward island|île-du-prince/i], ["NL", /newfoundland|terre-neuve/i],
-  ["YT", /yukon/i], ["NT", /northwest territories|territoires du nord-ouest/i], ["NU", /nunavut/i],
-];
-// Best-effort province guess from a geocoded place so the organizer rarely has
-// to set it by hand; they can still override with the dropdown.
-function provinceFromPlace(p) {
-  const s = p?.full || p?.name || "";
-  for (const [code, re] of PROV_PATTERNS) if (re.test(s)) return code;
-  return null;
-}
-
 const blankGame = () => ({
   venue: "", gameCode: "", location: "", place: null, date: "", time: "",
-  durationMin: 60, pay: 30, homeTeam: "", awayTeam: "", province: "BC",
+  durationMin: 60, pay: 30, homeTeam: "", awayTeam: "",
 });
 
 function GameForm({ game, idx, onChange, onRemove, canRemove, lbl, input, toast, minCents }) {
@@ -82,15 +58,9 @@ function GameForm({ game, idx, onChange, onRemove, canRemove, lbl, input, toast,
         </p>
       </div>
       <div>
+      <div>
         <label className={lbl} style={{ color: C.ink60 }}>City / area <span style={{ color: C.ink40 }}>(for map & distance)</span></label>
-        <CitySearch value={game.place} onSelect={(p) => { set("location", p.name); set("place", p); const code = provinceFromPlace(p); if (code) set("province", code); }} toast={toast} />
-        <div className="mt-2">
-          <label className={lbl} style={{ color: C.ink60 }}>Province <span style={{ color: C.ink40 }}>(sets the minimum pay)</span></label>
-          <select className={input} style={{ borderColor: C.mapleLine }} value={game.province || "BC"}
-            onChange={(e) => set("province", e.target.value)}>
-            {PROVINCES.map(([code, name]) => <option key={code} value={code}>{name}</option>)}
-          </select>
-        </div>
+        <CitySearch value={game.place} onSelect={(p) => { set("location", p.name); set("place", p); }} toast={toast} />
       </div>
       <div className="grid grid-cols-2 gap-2">
         <div>
@@ -134,6 +104,7 @@ export default function PostGig({ initial, onSubmit, onCancel, toast }) {
   const editing = !!initial;
   const [title, setTitle] = useState(initial?.title?.replace(/ — Game \d+$/, "") || "");
   const [sport, setSport] = useState(initial?.sport || "Basketball");
+  const [otherSport, setOtherSport] = useState("");
   const [type, setType] = useState(initial?.type || "single");
   const [postedAs, setPostedAs] = useState(initial?.posted_as || "");
   const [games, setGames] = useState(() => {
@@ -147,7 +118,7 @@ export default function PostGig({ initial, onSubmit, onCancel, toast }) {
         time: `${pad(d.getHours())}:${pad(d.getMinutes())}`,
         durationMin: initial.duration_min, pay: initial.pay_cents / 100,
         homeTeam: initial.home_team || "", awayTeam: initial.away_team || "",
-        province: initial.province || "BC",
+
       }];
     }
     return [blankGame()];
@@ -180,16 +151,15 @@ export default function PostGig({ initial, onSubmit, onCancel, toast }) {
 
   // Pay floor data from the backend (single source of truth). Until it loads we
   // fall back to the flat $22 floor so the form still works.
-  const [wage, setWage] = useState({ flatMinCents: 2200, rates: {} });
+  const [wage, setWage] = useState({ minGigCents: 2000, hourlyRateCents: 2000 });
   useEffect(() => {
     api("/min-wage").then(setWage).catch(() => {});
   }, []);
-  // Minimum a gig of this length in this province must pay — mirrors the server.
   const minCentsFor = (g) => {
-    const rate = wage.rates?.[g.province];
     const mins = Number(g.durationMin) || 60;
-    const wageBased = rate ? Math.ceil((rate * mins) / 60) : 0;
-    return Math.max(wage.flatMinCents || 2200, wageBased);
+    if (mins <= 60) return (wage.minGigCents || 2000);
+    const over = mins - 60;
+    return (wage.minGigCents || 2000) + Math.ceil(((wage.hourlyRateCents || 2000) * over) / 60);
   };
 
   const allValid = title && postedAs && games.every((g) => {
@@ -199,6 +169,7 @@ export default function PostGig({ initial, onSubmit, onCancel, toast }) {
   });
 
   const submit = () => {
+    const finalSport = sport === "Other" && otherSport.trim() ? `Other: ${otherSport.trim()}` : sport;
     const gamesPayload = games.map((g) => ({
       venue: g.venue || null, gameCode: g.gameCode || null,
       location: g.location, area: g.place.name, lat: g.place.lat, lng: g.place.lng,
@@ -206,9 +177,9 @@ export default function PostGig({ initial, onSubmit, onCancel, toast }) {
       durationMin: Number(g.durationMin) || 60,
       payCents: Math.round(g.pay * 100),
       homeTeam: g.homeTeam || null, awayTeam: g.awayTeam || null,
-      province: g.province || "BC",
+
     }));
-    onSubmit({ title, sport, type, postedAs, services, games: gamesPayload }, editing ? initial.id : null);
+    onSubmit({ title, sport: finalSport, type, postedAs, services, games: gamesPayload }, editing ? initial.id : null);
   };
 
   const totalGigs = games.length * (editing ? 1 : services.length);
@@ -249,6 +220,14 @@ export default function PostGig({ initial, onSubmit, onCancel, toast }) {
               {SPORTS.map((s) => <option key={s}>{s}</option>)}
             </select>
           </div>
+
+        {sport === "Other" && (
+          <div>
+            <label className={lbl} style={{ color: C.ink60 }}>What sport? <span style={{ color: C.ink40 }}>(let us know)</span></label>
+            <input className={input} style={{ borderColor: C.mapleLine }} value={otherSport}
+              onChange={(e) => setOtherSport(e.target.value)} placeholder="e.g. Ringette, Lacrosse, Curling…" maxLength={50} />
+          </div>
+        )}
           <div>
             <label className={lbl} style={{ color: C.ink60 }}>Type</label>
             <select className={input} style={{ borderColor: C.mapleLine }} value={type} onChange={(e) => changeType(e.target.value)}>

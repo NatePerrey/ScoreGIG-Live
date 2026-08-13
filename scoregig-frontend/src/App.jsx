@@ -16,6 +16,7 @@ import AdminDashboard from "./components/AdminDashboard.jsx";
 import ResumeModal from "./components/ResumeModal.jsx";
 import IssueModal from "./components/IssueModal.jsx";
 import TermsModal from "./components/TermsModal.jsx";
+import ContactModal from "./components/ContactModal.jsx";
 import Login from "./Login.jsx";
 
 function BadgeModal({ onPick, onClose }) {
@@ -103,6 +104,7 @@ export default function App() {
   const [issueFor, setIssueFor] = useState(null);
   const [termsCtx, setTermsCtx] = useState(null); // { context: 'post'|'claim', then: fn }
   const [showTerms, setShowTerms] = useState(false); // read-only Terms viewer
+  const [showContact, setShowContact] = useState(false);
   const [msg, setMsg] = useState(null);
   const toastTimer = useRef(null);
 
@@ -383,11 +385,18 @@ export default function App() {
           <BragBoard brags={brags} myDoneGigs={myDoneGigs} me={me} refresh={refreshGigs} toast={toast} />
         )}
 
-        <div className="mt-8 pb-2 text-center">
-          <button onClick={() => setShowTerms(true)} className="text-[11px] font-semibold underline"
-            style={{ color: C.ink40 }}>
-            Terms of Use
-          </button>
+        <div className="mt-8 pb-2 text-center space-y-2">
+          <div>
+            <button onClick={() => setShowTerms(true)} className="text-[11px] font-semibold underline"
+              style={{ color: C.ink40 }}>
+              Terms of Use
+            </button>
+            <span style={{ color: C.ink40 }}> · </span>
+            <button onClick={() => setShowContact(true)} className="text-[11px] font-semibold underline"
+              style={{ color: C.ink40 }}>
+              Contact us
+            </button>
+          </div>
         </div>
       </main>
 
@@ -410,6 +419,7 @@ export default function App() {
       {badgeFor && <BadgeModal onPick={awardBadge} onClose={() => setBadgeFor(null)} />}
       {resumeFor && <ResumeModal scorekeeperId={resumeFor} onClose={() => setResumeFor(null)} toast={toast} />}
       {issueFor && <IssueModal gig={issueFor} onClose={() => setIssueFor(null)} onDone={refreshGigs} toast={toast} />}
+      {showContact && <ContactModal onClose={() => setShowContact(false)} toast={toast} />}
       {showTerms && (
         <TermsModal readOnly onClose={() => setShowTerms(false)} onAccept={() => setShowTerms(false)} />
       )}

@@ -105,6 +105,7 @@ export default function GigMessages({ gig, me, toast }) {
 
           <div className="mt-2 flex items-center gap-2">
             <input value={draft} onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
               maxLength={1000} placeholder="Type a message…"
               className="flex-1 rounded-lg border px-3 py-2 text-sm" style={{ borderColor: C.mapleLine }} />
             <button disabled={busy || !draft.trim()} onClick={send}

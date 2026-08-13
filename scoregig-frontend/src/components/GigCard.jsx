@@ -77,6 +77,7 @@ export default function GigCard({ gig, me, viewer, onAction, onBadge, onEdit, on
     <div className="rounded-xl border bg-white p-4 shadow-sm" style={{ borderColor: C.mapleLine }}>
       <div className="flex items-start justify-between gap-2">
         <div>
+          <div className="text-[10px] font-bold uppercase tracking-wide" style={{ color: C.ink40 }}>Gig #{gig.id}</div>
           <div className="font-bold leading-snug" style={{ color: C.navy }}>{gig.title}</div>
           {gig.posted_as && (
             <div className="mt-0.5 text-[11px] font-semibold" style={{ color: C.ink60 }}>
