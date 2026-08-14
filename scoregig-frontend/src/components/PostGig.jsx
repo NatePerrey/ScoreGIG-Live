@@ -58,7 +58,6 @@ function GameForm({ game, idx, onChange, onRemove, canRemove, lbl, input, toast,
         </p>
       </div>
       <div>
-      <div>
         <label className={lbl} style={{ color: C.ink60 }}>City / area <span style={{ color: C.ink40 }}>(for map & distance)</span></label>
         <CitySearch value={game.place} onSelect={(p) => { set("location", p.name); set("place", p); }} toast={toast} />
       </div>
