@@ -65,11 +65,15 @@ function record(userId, gigId, channel, toAddr, state, status, detail) {
 }
 
 /* ------------------------------- EMAIL ----------------------------------- */
-async function sendEmail(user, gig, state, body) {
-  if (!user.email) return;
+// Low-level, reusable email send. Handles the not-configured-yet path, the
+// SendGrid POST, and the notifications-log record. Used both by gig-state
+// notifications (fixed "ScoreGIG update" subject) and by new-gig broadcasts
+// (their own subject line). Never throws.
+export async function emailUser({ user, gigId = null, state = "", subject = "ScoreGIG update", body }) {
+  if (!user || !user.email) return;
   if (!EMAIL_READY()) {
-    console.log(`[notify:email pending-setup] -> ${user.email}: ${body}`);
-    record(user.id, gig.id, "email", user.email, state, "pending-setup");
+    console.log(`[notify:email pending-setup] -> ${user.email}: ${subject}`);
+    record(user.id, gigId, "email", user.email, state, "pending-setup");
     return;
   }
   try {
@@ -82,19 +86,23 @@ async function sendEmail(user, gig, state, body) {
       body: JSON.stringify({
         personalizations: [{ to: [{ email: user.email }] }],
         from: { email: process.env.SENDGRID_FROM, name: "ScoreGIG" },
-        subject: "ScoreGIG update",
+        subject,
         content: [{ type: "text/plain", value: body }],
       }),
     });
     if (res.ok) {
-      record(user.id, gig.id, "email", user.email, state, "sent");
+      record(user.id, gigId, "email", user.email, state, "sent");
     } else {
       const txt = await res.text().catch(() => "");
-      record(user.id, gig.id, "email", user.email, state, "failed", `${res.status} ${txt}`.slice(0, 200));
+      record(user.id, gigId, "email", user.email, state, "failed", `${res.status} ${txt}`.slice(0, 200));
     }
   } catch (err) {
-    record(user.id, gig.id, "email", user.email, state, "failed", String(err.message).slice(0, 200));
+    record(user.id, gigId, "email", user.email, state, "failed", String(err.message).slice(0, 200));
   }
+}
+
+async function sendEmail(user, gig, state, body) {
+  await emailUser({ user, gigId: gig.id, state, subject: "ScoreGIG update", body });
 }
 
 /* -------------------------------- SMS ------------------------------------ */

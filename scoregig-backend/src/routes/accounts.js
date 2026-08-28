@@ -156,9 +156,32 @@ accounts.patch("/me/profile", auth(), (req, res) => {
     }
   }
 
-  db.prepare("UPDATE users SET display_name = ?, bio = ?, experience = ?, city = ?, games_worked = ?, sports = ?, phone = ?, notifications_enabled = ?, sms_consent = ?, sms_consent_at = ?, sms_opted_out = ? WHERE id = ?")
-    .run(displayName, bio, experience, city, gamesWorked, JSON.stringify(sports), phone || null, notificationsEnabled ? 1 : 0, smsConsent, smsConsentAt, smsOptedOut, req.user.id);
-  res.json({ displayName, bio, experience, city, gamesWorked, sports, phone: phone || "", notificationsEnabled, smsConsent: Boolean(smsConsent), smsOptedOut: Boolean(smsOptedOut) });
+  // New-gig alert prefs (all partial-safe — fall back to stored values).
+  const notifyNewGigs = typeof req.body.notifyNewGigs === "boolean"
+    ? req.body.notifyNewGigs
+    : (req.user.notify_new_gigs == null ? true : Boolean(req.user.notify_new_gigs));
+  let notifySports;
+  if (has("notifySports")) {
+    notifySports = (Array.isArray(req.body.notifySports) ? req.body.notifySports.slice(0, 12) : [])
+      .filter((s) => typeof s === "string" && s.length < 40);
+  } else {
+    notifySports = req.user.notify_sports ? JSON.parse(req.user.notify_sports) : null;
+  }
+  const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
+  const notifyLat = has("notifyLat") ? num(req.body.notifyLat) : (req.user.notify_lat ?? null);
+  const notifyLng = has("notifyLng") ? num(req.body.notifyLng) : (req.user.notify_lng ?? null);
+  const notifyLabel = has("notifyLabel")
+    ? String(req.body.notifyLabel || "").slice(0, 120)
+    : (req.user.notify_label || "");
+  let notifyRadiusKm = has("notifyRadiusKm")
+    ? num(req.body.notifyRadiusKm)
+    : (req.user.notify_radius_km == null ? 40 : req.user.notify_radius_km);
+  if (!Number.isFinite(notifyRadiusKm)) notifyRadiusKm = 40;
+  notifyRadiusKm = Math.min(200, Math.max(1, Math.round(notifyRadiusKm))); // clamp 1–200 km
+
+  db.prepare("UPDATE users SET display_name = ?, bio = ?, experience = ?, city = ?, games_worked = ?, sports = ?, phone = ?, notifications_enabled = ?, sms_consent = ?, sms_consent_at = ?, sms_opted_out = ?, notify_new_gigs = ?, notify_sports = ?, notify_lat = ?, notify_lng = ?, notify_label = ?, notify_radius_km = ? WHERE id = ?")
+    .run(displayName, bio, experience, city, gamesWorked, JSON.stringify(sports), phone || null, notificationsEnabled ? 1 : 0, smsConsent, smsConsentAt, smsOptedOut, notifyNewGigs ? 1 : 0, notifySports == null ? null : JSON.stringify(notifySports), notifyLat, notifyLng, notifyLabel || null, notifyRadiusKm, req.user.id);
+  res.json({ displayName, bio, experience, city, gamesWorked, sports, phone: phone || "", notificationsEnabled, smsConsent: Boolean(smsConsent), smsOptedOut: Boolean(smsOptedOut), notifyNewGigs, notifySports: notifySports == null ? [] : notifySports, notifyLat, notifyLng, notifyLabel: notifyLabel || "", notifyRadiusKm });
 });
 
 // Public scorekeeper profile: resume + earned badges + completed gig history.

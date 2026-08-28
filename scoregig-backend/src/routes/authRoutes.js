@@ -151,6 +151,12 @@ authRoutes.get("/me", auth(), (req, res) => {
     gamesWorked: u.games_worked || "",
     sports: u.sports ? JSON.parse(u.sports) : [],
     city: u.city || "",
+    notifyNewGigs: u.notify_new_gigs == null ? true : Boolean(u.notify_new_gigs),
+    notifySports: u.notify_sports ? JSON.parse(u.notify_sports) : [],
+    notifyLat: u.notify_lat ?? null,
+    notifyLng: u.notify_lng ?? null,
+    notifyLabel: u.notify_label || "",
+    notifyRadiusKm: u.notify_radius_km == null ? 40 : u.notify_radius_km,
   });
 });
 

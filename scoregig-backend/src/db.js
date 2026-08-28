@@ -182,6 +182,17 @@ addColumn("ALTER TABLE users ADD COLUMN notifications_enabled INTEGER DEFAULT 1"
 addColumn("ALTER TABLE users ADD COLUMN sms_consent INTEGER DEFAULT 0");           // explicit opt-in to texts (CASL)
 addColumn("ALTER TABLE users ADD COLUMN sms_consent_at INTEGER");                  // when they consented
 addColumn("ALTER TABLE users ADD COLUMN sms_opted_out INTEGER DEFAULT 0");         // texted STOP / opted back out
+// New-gig broadcast prefs: instant "new gig near you" alerts. A gig matches when
+// its sport is in notify_sports AND it falls within notify_radius_km of the
+// scorekeeper's watch point (notify_lat/lng). notify_sports is a JSON array;
+// null falls back to the scorekeeper's resume sports so an existing keeper is
+// matchable the moment they set a watch location.
+addColumn("ALTER TABLE users ADD COLUMN notify_new_gigs INTEGER DEFAULT 1");       // master switch for new-gig alerts
+addColumn("ALTER TABLE users ADD COLUMN notify_sports TEXT");                      // JSON array of sports to watch (null = resume sports)
+addColumn("ALTER TABLE users ADD COLUMN notify_lat REAL");                         // watch point latitude
+addColumn("ALTER TABLE users ADD COLUMN notify_lng REAL");                         // watch point longitude
+addColumn("ALTER TABLE users ADD COLUMN notify_label TEXT");                       // human label for the watch point
+addColumn("ALTER TABLE users ADD COLUMN notify_radius_km INTEGER DEFAULT 40");     // match radius in km
 // Guardian email-consent for minors (15–17). Account exists immediately but
 // gig posting/requesting is blocked until a parent/guardian confirms via the
 // link emailed to guardian_email. Adults are seeded 'not_required'.

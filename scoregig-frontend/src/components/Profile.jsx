@@ -28,6 +28,21 @@ export default function Profile({ me, myGigs, toast, refreshMe }) {
   const [savingNotifs, setSavingNotifs] = useState(false);
   const toggleSport = (s) => setSports((p) => p.includes(s) ? p.filter((x) => x !== s) : [...p, s]);
 
+  // New-gig alert prefs. Sports default to the scorekeeper's resume sports so
+  // they're matchable the moment they add a watch location.
+  const [notifyNewGigs, setNotifyNewGigs] = useState(me.notifyNewGigs !== false);
+  const [notifySports, setNotifySports] = useState(
+    me.notifySports && me.notifySports.length ? me.notifySports : (me.sports || [])
+  );
+  const [alertPlace, setAlertPlace] = useState(
+    (me.notifyLat != null && me.notifyLng != null)
+      ? { name: me.notifyLabel || me.city || "", lat: me.notifyLat, lng: me.notifyLng }
+      : null
+  );
+  const [radiusKm, setRadiusKm] = useState(me.notifyRadiusKm || 40);
+  const [savingAlerts, setSavingAlerts] = useState(false);
+  const toggleNotifySport = (s) => setNotifySports((p) => p.includes(s) ? p.filter((x) => x !== s) : [...p, s]);
+
   const [cashOutResult, setCashOutResult] = useState(null);
   const [cashingOut, setCashingOut] = useState(false);
   const [rechecking, setRechecking] = useState(false); // pressed/loading state on Re-check status (#4)
@@ -60,6 +75,24 @@ export default function Profile({ me, myGigs, toast, refreshMe }) {
       refreshMe();
     } catch (e) { toast(e.message, true); }
     finally { setSavingNotifs(false); }
+  };
+
+  const saveAlerts = async () => {
+    if (notifyNewGigs && !alertPlace) { toast("Pick a location so we know where to look for gigs.", true); return; }
+    setSavingAlerts(true);
+    try {
+      await api("/me/profile", { method: "PATCH", body: {
+        notifyNewGigs,
+        notifySports,
+        notifyLat: alertPlace ? alertPlace.lat : null,
+        notifyLng: alertPlace ? alertPlace.lng : null,
+        notifyLabel: alertPlace ? alertPlace.name : "",
+        notifyRadiusKm: radiusKm,
+      } });
+      toast("Gig alerts saved.");
+      refreshMe();
+    } catch (e) { toast(e.message, true); }
+    finally { setSavingAlerts(false); }
   };
 
   const onboard = async () => {
@@ -366,6 +399,80 @@ export default function Profile({ me, myGigs, toast, refreshMe }) {
         <button onClick={saveNotifs} disabled={savingNotifs}
           className="mt-3 w-full rounded-lg py-2.5 font-bold text-white disabled:opacity-50" style={{ backgroundColor: C.navy }}>
           {savingNotifs ? "Saving…" : "Save notification settings"}
+        </button>
+      </div>
+
+      {/* New gig alerts — instant email the moment a matching gig opens nearby. */}
+      <div className="mt-4 rounded-xl border bg-white p-4" style={{ borderColor: C.mapleLine }}>
+        <div className="text-sm font-bold" style={{ color: C.navy }}>New gig alerts</div>
+        <p className="mt-0.5 text-[11px]" style={{ color: C.ink60 }}>
+          Get an instant email the moment a gig opens near you in a sport you score. Gigs are first-come, so a heads-up helps you grab them early.
+        </p>
+
+        <label className="mt-3 flex items-center justify-between gap-3">
+          <span className="text-sm font-semibold" style={{ color: C.navy }}>Email me new gigs</span>
+          <button onClick={() => setNotifyNewGigs((v) => !v)} role="switch" aria-checked={notifyNewGigs}
+            className="relative h-6 w-11 rounded-full transition-colors"
+            style={{ backgroundColor: notifyNewGigs ? C.green : C.mapleLine }}>
+            <span className="absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all"
+              style={{ left: notifyNewGigs ? "1.5rem" : "0.125rem" }} />
+          </button>
+        </label>
+
+        {notifyNewGigs && (
+          <>
+            <div className="mt-3">
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide" style={{ color: C.ink60 }}>Sports to watch</label>
+              <div className="flex flex-wrap gap-1.5">
+                {SPORTS.map((s) => (
+                  <button key={s} type="button" onClick={() => toggleNotifySport(s)}
+                    className="rounded-full border px-3 py-1 text-xs font-semibold"
+                    style={notifySports.includes(s)
+                      ? { backgroundColor: C.navy, color: "#fff", borderColor: C.navy }
+                      : { backgroundColor: "transparent", color: C.navy, borderColor: C.mapleLine }}>
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-3">
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide" style={{ color: C.ink60 }}>Alert me around</label>
+              <CitySearch value={alertPlace} onSelect={(r) => setAlertPlace(r)} toast={toast} />
+            </div>
+
+            <div className="mt-3">
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide" style={{ color: C.ink60 }}>
+                Within {radiusKm} km
+              </label>
+              <div className="flex gap-1.5">
+                {[10, 25, 40, 60].map((km) => (
+                  <button key={km} type="button" onClick={() => setRadiusKm(km)}
+                    className="flex-1 rounded-lg border py-1.5 text-xs font-semibold"
+                    style={radiusKm === km
+                      ? { backgroundColor: C.amber, color: C.navy, borderColor: C.amber }
+                      : { backgroundColor: "transparent", color: C.navy, borderColor: C.mapleLine }}>
+                    {km} km
+                  </button>
+                ))}
+              </div>
+              {!alertPlace && (
+                <p className="mt-2 text-[10px]" style={{ color: C.ink40 }}>
+                  Pick a location above so we know where to look for gigs.
+                </p>
+              )}
+              {notifySports.length === 0 && (
+                <p className="mt-1 text-[10px]" style={{ color: C.ink40 }}>
+                  Pick at least one sport, or you won't be matched to anything.
+                </p>
+              )}
+            </div>
+          </>
+        )}
+
+        <button onClick={saveAlerts} disabled={savingAlerts}
+          className="mt-3 w-full rounded-lg py-2.5 font-bold text-white disabled:opacity-50" style={{ backgroundColor: C.navy }}>
+          {savingAlerts ? "Saving…" : "Save gig alerts"}
         </button>
       </div>
 

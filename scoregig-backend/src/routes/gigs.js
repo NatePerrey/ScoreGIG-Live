@@ -13,6 +13,7 @@ import { checkClean } from "../clean.js";
 import { guardianBlocked } from "../guardian.js";
 import { minPayCents, isValidProvince, PROVINCES, MIN_WAGE_CENTS, FLAT_MIN_CENTS, MIN_WAGE_AS_OF } from "../pricing.js";
 import { notifyGigState } from "../notify.js";
+import { broadcastNewGig } from "../broadcast.js";
 import { cancellationStanding } from "../reliability.js";
 
 export const gigs = Router();
@@ -147,6 +148,10 @@ gigs.post("/gigs", auth(), (req, res) => {
       created.push(gigWithEvents(info.lastInsertRowid));
     }
   }
+
+  // Ping matching scorekeepers that a new gig just opened (fire-and-forget so
+  // it never blocks the organizer's post from returning).
+  for (const g of created) broadcastNewGig(g.id);
 
   res.status(201).json(created.length === 1 ? created[0] : created);
 });
