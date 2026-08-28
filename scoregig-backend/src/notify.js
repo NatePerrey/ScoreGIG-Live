@@ -105,6 +105,40 @@ async function sendEmail(user, gig, state, body) {
   await emailUser({ user, gigId: gig.id, state, subject: "ScoreGIG update", body });
 }
 
+// Low-level one-off send with no notifications-log side effects. Used for mail
+// that isn't a per-user gig notification — e.g. the contact form, where the
+// recipient is the support inbox and the submitter goes in reply_to so you can
+// just hit Reply. Returns { ok, detail } instead of recording to the DB.
+export async function sendRawEmail({ to, replyTo, subject, text }) {
+  if (!to) return { ok: false, detail: "no recipient" };
+  if (!EMAIL_READY()) {
+    console.log(`[notify:email pending-setup raw] -> ${to}: ${subject}\n${text}`);
+    return { ok: true, pending: true };
+  }
+  try {
+    const payload = {
+      personalizations: [{ to: [{ email: to }] }],
+      from: { email: process.env.SENDGRID_FROM, name: "ScoreGIG" },
+      subject,
+      content: [{ type: "text/plain", value: text }],
+    };
+    if (replyTo) payload.reply_to = { email: replyTo };
+    const res = await fetch("https://api.sendgrid.com/v3/mail/send", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.SENDGRID_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+    if (res.ok) return { ok: true };
+    const detail = await res.text().catch(() => "");
+    return { ok: false, detail: `${res.status} ${detail}`.slice(0, 200) };
+  } catch (err) {
+    return { ok: false, detail: String(err.message).slice(0, 200) };
+  }
+}
+
 /* -------------------------------- SMS ------------------------------------ */
 async function sendSMS(user, gig, state, body) {
   if (!user.phone) return;
