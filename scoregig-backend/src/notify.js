@@ -86,6 +86,7 @@ export async function emailUser({ user, gigId = null, state = "", subject = "Sco
       body: JSON.stringify({
         personalizations: [{ to: [{ email: user.email }] }],
         from: { email: process.env.SENDGRID_FROM, name: "ScoreGIG" },
+        reply_to: { email: process.env.SUPPORT_EMAIL || "nathanperrey@scoregig.ca" },
         subject,
         content: [{ type: "text/plain", value: body }],
       }),

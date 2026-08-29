@@ -84,6 +84,7 @@ export async function sendGuardianConsentEmail(user) {
       body: JSON.stringify({
         personalizations: [{ to: [{ email: to }] }],
         from: { email: process.env.SENDGRID_FROM, name: "ScoreGIG" },
+        reply_to: { email: process.env.SUPPORT_EMAIL || "nathanperrey@scoregig.ca" },
         subject: "Parent/guardian consent needed for ScoreGIG",
         content: [{ type: "text/plain", value: body }],
       }),

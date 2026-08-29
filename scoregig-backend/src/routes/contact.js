@@ -5,10 +5,11 @@
 // hitting Reply. No auth: a logged-out person hitting a snag must be able to
 // reach us.
 //
-// Recipient resolution: SUPPORT_EMAIL if set, else SENDGRID_FROM (your verified
-// sender), else a hard fallback. So this works today with zero new config —
-// messages land in the nathanperrey@scoregig.ca inbox that's already live — and
-// you can point SUPPORT_EMAIL somewhere else later without a code change.
+// Recipient resolution: SUPPORT_EMAIL if set, else a hard fallback to the real
+// inbox. Deliberately does NOT fall back to SENDGRID_FROM — that address may be
+// a no-mailbox sender like notifications@, so contact mail must never chase it.
+// Works with zero config today (lands in nathanperrey@scoregig.ca); point
+// SUPPORT_EMAIL elsewhere later without a code change.
 import { Router } from "express";
 import { sendRawEmail } from "../notify.js";
 
@@ -47,7 +48,7 @@ contact.post("/contact", async (req, res) => {
   if (!emailRe.test(email)) return res.status(400).json({ error: "Please enter a valid email so we can reply." });
   if (!message) return res.status(400).json({ error: "Please add a message." });
 
-  const to = process.env.SUPPORT_EMAIL || process.env.SENDGRID_FROM || "nathanperrey@scoregig.ca";
+  const to = process.env.SUPPORT_EMAIL || "nathanperrey@scoregig.ca";
   const subject = `ScoreGIG contact — ${name}${gigId ? ` (gig #${gigId})` : ""}`;
   const text =
 `New message from the ScoreGIG contact form:
