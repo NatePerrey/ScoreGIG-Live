@@ -120,9 +120,14 @@ gigs.post("/gigs", auth(), (req, res) => {
       return res.status(400).json({ error: "Each game needs a valid province so we can enforce minimum-wage pay." });
     }
     const minCents = minPayCents(prov, g.durationMin);
-    if (!Number.isInteger(g.payCents) || g.payCents < minCents) {
-      const mins = Number(g.durationMin) || 60;
-      return res.status(400).json({ error: `A ${mins}-minute gig in ${prov} must pay the scorekeeper at least $${(minCents / 100).toFixed(2)} CAD — that's minimum wage for the time. Please raise the pay.` });
+    // Pay can be a single payCents, or a per-role map (payByService) when the
+    // organizer hires both roles at different rates. Every rate must clear the floor.
+    const paysToCheck = g.payByService ? Object.values(g.payByService) : [g.payCents];
+    for (const pc of paysToCheck) {
+      if (!Number.isInteger(pc) || pc < minCents) {
+        const mins = Number(g.durationMin) || 60;
+        return res.status(400).json({ error: `A ${mins}-minute gig in ${prov} must pay the scorekeeper at least $${(minCents / 100).toFixed(2)} CAD — that's minimum wage for the time. Please raise the pay.` });
+      }
     }
   }
 
@@ -135,7 +140,9 @@ gigs.post("/gigs", auth(), (req, res) => {
   for (const service of services) {
     for (let i = 0; i < games.length; i++) {
       const g = games[i];
-      const feeCents = Math.round((g.payCents * FEE_PERCENT) / 100);
+      // Per-role pay when hiring both roles at different rates; else the game's single pay.
+      const payCents = (g.payByService && Number.isInteger(g.payByService[service])) ? g.payByService[service] : g.payCents;
+      const feeCents = Math.round((payCents * FEE_PERCENT) / 100);
       let gameTitle = title;
       if (games.length > 1) gameTitle += ` — Game ${i + 1}`;
       if (services.length > 1) gameTitle += ` · ${SERVICE_LABEL[service]}`;
@@ -145,7 +152,7 @@ gigs.post("/gigs", auth(), (req, res) => {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(req.user.id, gameTitle, postedAs, sport, type || "single", service,
              g.venue || null, g.gameCode || null, g.location, g.area || null, g.lat ?? null, g.lng ?? null,
-             g.startAt, g.durationMin || 60, g.payCents, feeCents,
+             g.startAt, g.durationMin || 60, payCents, feeCents,
              g.homeTeam || null, g.awayTeam || null, String(g.province || "").toUpperCase(), tournamentId, notes);
       logEvent(info.lastInsertRowid, "auth", "Card on file · charged only when you approve someone");
       created.push(gigWithEvents(info.lastInsertRowid));

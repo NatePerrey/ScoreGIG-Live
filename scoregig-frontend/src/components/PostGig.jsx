@@ -9,6 +9,15 @@ import CitySearch from "./CitySearch.jsx";
 
 const POSTED_AS = ["Parent", "Team Manager", "Coach", "Tournament Coordinator", "Association Admin"];
 const SERVICE_LIST = Object.values(SERVICES);
+// Canadian provinces/territories — drives the minimum-wage floor the backend enforces.
+const PROVINCES = [
+  { code: "BC", name: "British Columbia" }, { code: "AB", name: "Alberta" },
+  { code: "SK", name: "Saskatchewan" }, { code: "MB", name: "Manitoba" },
+  { code: "ON", name: "Ontario" }, { code: "QC", name: "Quebec" },
+  { code: "NB", name: "New Brunswick" }, { code: "NS", name: "Nova Scotia" },
+  { code: "PE", name: "Prince Edward Island" }, { code: "NL", name: "Newfoundland and Labrador" },
+  { code: "YT", name: "Yukon" }, { code: "NT", name: "Northwest Territories" }, { code: "NU", name: "Nunavut" },
+];
 
 const blankGame = () => ({
   venue: "", gameCode: "", location: "", place: null, date: "", time: "",
@@ -104,6 +113,7 @@ export default function PostGig({ initial, onSubmit, onCancel, toast }) {
   const [title, setTitle] = useState(initial?.title?.replace(/ \u2014 Game \d+$/, "") || "");
   const [sport, setSport] = useState(initial?.sport || "Basketball");
   const [otherSport, setOtherSport] = useState("");
+  const [province, setProvince] = useState(initial?.province || "");
   const [type, setType] = useState(initial?.type || "single");
   const [postedAs, setPostedAs] = useState(initial?.posted_as || "");
   const [games, setGames] = useState(() => {
@@ -125,6 +135,11 @@ export default function PostGig({ initial, onSubmit, onCancel, toast }) {
   // Which roles to hire for (new posts only — a gig's role is fixed once created).
   const [services, setServices] = useState(initial?.service ? [initial.service] : ["scorekeeper"]);
   const [notes, setNotes] = useState(initial?.notes || "");
+  // Posting flow: choose Single vs Tournament, then (single) pick role(s).
+  const [mode, setMode] = useState(editing ? (initial?.type === "single" ? "single" : "tournament") : "choose");
+  const [singleRole, setSingleRole] = useState(editing && initial?.type === "single" ? (initial.service || "scorekeeper") : null);
+  const [bothRoles, setBothRoles] = useState(false);
+  const [paySheet, setPaySheet] = useState(30); // scoresheet pay ($) when both roles picked
   const toggleService = (k) => setServices((p) =>
     p.includes(k) ? (p.length > 1 ? p.filter((x) => x !== k) : p) : [...p, k]);
 
@@ -151,18 +166,32 @@ export default function PostGig({ initial, onSubmit, onCancel, toast }) {
 
   // Pay floor data from the backend (single source of truth). Until it loads we
   // fall back to the flat $22 floor so the form still works.
-  const [wage, setWage] = useState({ minGigCents: 2000, hourlyRateCents: 2000 });
+  const [wage, setWage] = useState({ flatMinCents: 2000, rates: {}, provinces: [] });
   useEffect(() => {
     api("/min-wage").then(setWage).catch(() => {});
   }, []);
+  // Mirror the backend's minPayCents(province, durationMin): max(flat floor,
+  // minimum wage prorated to the game length). Falls back to the flat floor
+  // until a province is picked or the rates load.
   const minCentsFor = (g) => {
     const mins = Number(g.durationMin) || 60;
-    if (mins <= 60) return (wage.minGigCents || 2000);
-    const over = mins - 60;
-    return (wage.minGigCents || 2000) + Math.ceil(((wage.hourlyRateCents || 2000) * over) / 60);
+    const flat = wage.flatMinCents || 2000;
+    const rate = (wage.rates && wage.rates[province]) || 0;
+    if (!rate) return flat;
+    return Math.max(flat, Math.ceil((rate * mins) / 60));
   };
 
-  const allValid = title && postedAs && games.every((g) => {
+  // Effective roles: single mode derives from the toggle/checkbox; tournament
+  // mode uses the existing multi-select.
+  const effServices = mode === "single"
+    ? (bothRoles ? ["scorekeeper", "scoresheet"] : (singleRole ? [singleRole] : []))
+    : services;
+
+  const roleValid = mode === "single" ? (bothRoles || !!singleRole) : services.length > 0;
+  const sheetMin = minCentsFor(games[0] || { durationMin: 60 });
+  const sheetPayValid = !(mode === "single" && bothRoles) || Math.round((Number(paySheet) || 0) * 100) >= sheetMin;
+
+  const allValid = title && postedAs && province && roleValid && sheetPayValid && games.every((g) => {
     const startMs = g.date && g.time ? new Date(`${g.date}T${g.time}`).getTime() : null;
     return g.location && g.place && startMs && startMs > Date.now()
       && Math.round((Number(g.pay) || 0) * 100) >= minCentsFor(g);
@@ -170,24 +199,58 @@ export default function PostGig({ initial, onSubmit, onCancel, toast }) {
 
   const submit = () => {
     const finalSport = sport === "Other" && otherSport.trim() ? `Other: ${otherSport.trim()}` : sport;
-    const gamesPayload = games.map((g) => ({
-      venue: g.venue || null, gameCode: g.gameCode || null,
-      location: g.location, area: g.place.name, lat: g.place.lat, lng: g.place.lng,
-      startAt: new Date(`${g.date}T${g.time}`).getTime(),
-      durationMin: Number(g.durationMin) || 60,
-      payCents: Math.round(g.pay * 100),
-      homeTeam: g.homeTeam || null, awayTeam: g.awayTeam || null,
-
-    }));
-    onSubmit({ title, sport: finalSport, type, postedAs, services, games: gamesPayload, notes: notes.trim() || null }, editing ? initial.id : null);
+    const gamesPayload = games.map((g) => {
+      const row = {
+        venue: g.venue || null, gameCode: g.gameCode || null,
+        location: g.location, area: g.place.name, lat: g.place.lat, lng: g.place.lng,
+        startAt: new Date(`${g.date}T${g.time}`).getTime(),
+        durationMin: Number(g.durationMin) || 60,
+        payCents: Math.round(g.pay * 100),
+        province,
+        homeTeam: g.homeTeam || null, awayTeam: g.awayTeam || null,
+      };
+      // Single gig, both roles: game Pay = scorekeeper (clock) pay; paySheet = scoresheet pay.
+      if (mode === "single" && bothRoles) {
+        row.payByService = { scorekeeper: Math.round(g.pay * 100), scoresheet: Math.round(paySheet * 100) };
+      }
+      return row;
+    });
+    onSubmit({ title, sport: finalSport, type, postedAs, services: effServices, games: gamesPayload, notes: notes.trim() || null }, editing ? initial.id : null);
   };
 
-  const totalGigs = games.length * (editing ? 1 : services.length);
+  const totalGigs = games.length * (editing ? 1 : effServices.length);
+
+  if (mode === "choose") {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="sg-display text-xl" style={{ color: C.navy }}>POST A GIG</h2>
+          <button onClick={onCancel} className="text-sm font-bold" style={{ color: C.ink60 }}>Cancel</button>
+        </div>
+        <p className="text-sm" style={{ color: C.ink60 }}>What are you posting?</p>
+        <button onClick={() => { setMode("single"); changeType("single"); }}
+          className="w-full rounded-xl border-2 p-4 text-left" style={{ borderColor: C.navy, backgroundColor: "#fff" }}>
+          <div className="text-base font-bold" style={{ color: C.navy }}>Post a Single Gig</div>
+          <div className="mt-0.5 text-xs" style={{ color: C.ink60 }}>One game. Pick the role you need filled — or both.</div>
+        </button>
+        <button onClick={() => { setMode("tournament"); changeType("tournament"); }}
+          className="w-full rounded-xl border-2 p-4 text-left" style={{ borderColor: C.amber, backgroundColor: "#fff" }}>
+          <div className="text-base font-bold" style={{ color: C.navy }}>Post Tournament Gigs</div>
+          <div className="mt-0.5 text-xs" style={{ color: C.ink60 }}>Multiple games at once — each posts as its own claimable gig.</div>
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="sg-display text-xl" style={{ color: C.navy }}>{editing ? "EDIT GIG" : "POST A GIG"}</h2>
+        <div className="flex items-center gap-2">
+          {!editing && (
+            <button onClick={() => setMode("choose")} className="text-sm font-bold" style={{ color: C.ink60 }}>‹ Back</button>
+          )}
+          <h2 className="sg-display text-xl" style={{ color: C.navy }}>{editing ? "EDIT GIG" : mode === "single" ? "SINGLE GIG" : "TOURNAMENT"}</h2>
+        </div>
         <button onClick={onCancel} className="text-sm font-bold" style={{ color: C.ink60 }}>Cancel</button>
       </div>
 
@@ -228,7 +291,7 @@ export default function PostGig({ initial, onSubmit, onCancel, toast }) {
               onChange={(e) => setOtherSport(e.target.value)} placeholder="e.g. Ringette, Lacrosse, Curling…" maxLength={50} />
           </div>
         )}
-          <div>
+          <div style={{ display: mode === "single" ? "none" : "block" }}>
             <label className={lbl} style={{ color: C.ink60 }}>Type</label>
             <select className={input} style={{ borderColor: C.mapleLine }} value={type} onChange={(e) => changeType(e.target.value)}>
               {Object.entries(GIG_TYPES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
@@ -236,7 +299,54 @@ export default function PostGig({ initial, onSubmit, onCancel, toast }) {
           </div>
         </div>
 
-        {!editing && (
+        <div>
+          <label className={lbl} style={{ color: C.ink60 }}>
+            Province{mode === "tournament" ? " (all games)" : ""}
+          </label>
+          <select className={input} style={{ borderColor: province ? C.mapleLine : C.red }}
+            value={province} onChange={(e) => setProvince(e.target.value)}>
+            <option value="">Select a province…</option>
+            {PROVINCES.map((p) => <option key={p.code} value={p.code}>{p.name}</option>)}
+          </select>
+          <p className="mt-1 text-[10px]" style={{ color: C.ink40 }}>
+            Sets the minimum pay we enforce (minimum wage for the game length).
+          </p>
+        </div>
+
+        {!editing && mode === "single" && (
+          <div>
+            <label className={lbl} style={{ color: C.ink60 }}>Which role do you need?</label>
+            <div className="grid grid-cols-2 gap-2">
+              {SERVICE_LIST.map((s) => (
+                <button key={s.key} type="button" onClick={() => setSingleRole(s.key)} disabled={bothRoles}
+                  className="rounded-lg border px-2 py-2 text-center disabled:opacity-40"
+                  style={(!bothRoles && singleRole === s.key)
+                    ? { backgroundColor: C.navy, color: "#fff", borderColor: C.navy }
+                    : { borderColor: C.mapleLine, color: C.navy, backgroundColor: "#fff" }}>
+                  <span className="block text-xs font-bold">{s.label}</span>
+                  <span className="block text-[9px] leading-tight" style={{ color: (!bothRoles && singleRole === s.key) ? "rgba(255,255,255,0.7)" : C.ink40 }}>{s.desc}</span>
+                </button>
+              ))}
+            </div>
+            <label className="mt-2 flex items-center gap-2 text-xs font-semibold" style={{ color: C.navy }}>
+              <input type="checkbox" checked={bothRoles} onChange={(e) => setBothRoles(e.target.checked)} />
+              I need both roles filled (creates a separate gig for each)
+            </label>
+            {bothRoles && (
+              <div className="mt-2">
+                <label className={lbl} style={{ color: C.ink60 }}>Scoresheet pay (CAD)</label>
+                <input type="number" min={Math.ceil(sheetMin / 100)} step={1} className={input}
+                  style={{ borderColor: sheetPayValid ? C.mapleLine : C.red }}
+                  value={paySheet} onChange={(e) => setPaySheet(Number(e.target.value))} />
+                <p className="mt-1 text-[10px]" style={{ color: sheetPayValid ? C.ink40 : C.red }}>
+                  The game's Pay field below is the Scorekeeper (clock) pay. This is the separate Scoresheet pay — min ${(sheetMin / 100).toFixed(2)}.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {!editing && mode !== "single" && (
           <div>
             <label className={lbl} style={{ color: C.ink60 }}>Who do you need? <span style={{ color: C.ink40 }}>(pick one or more)</span></label>
             <div className="grid grid-cols-2 gap-2">
