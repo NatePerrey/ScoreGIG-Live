@@ -22,6 +22,11 @@ export async function api(path, { method = "GET", body } = {}) {
     body: body ? JSON.stringify(body) : undefined,
   });
   const data = await res.json().catch(() => ({}));
+  if (res.status === 401) {
+    // Token missing/expired/invalid — drop it and tell the app to sign out.
+    setToken(null);
+    if (typeof window !== "undefined") window.dispatchEvent(new Event("scoregig:signout"));
+  }
   if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
   return data;
 }

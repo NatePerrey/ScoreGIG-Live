@@ -107,6 +107,12 @@ export default function GigCard({ gig, me, viewer, onAction, onBadge, onEdit, on
               Game code: {gig.game_code}
             </div>
           )}
+          {gig.notes && (
+            <div className="mt-1.5 rounded-lg px-2 py-1.5 text-[11px]"
+              style={{ backgroundColor: C.maple, color: C.navy }}>
+              <span className="font-bold">Note from organizer:</span> {gig.notes}
+            </div>
+          )}
         </div>
         <div className="flex items-start gap-1 shrink-0">
           <div className="text-right">

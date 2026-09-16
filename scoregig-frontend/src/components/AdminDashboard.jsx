@@ -139,12 +139,15 @@ export default function AdminDashboard({ toast }) {
   const [flags, setFlags] = useState([]);
   const [tab, setTab] = useState("overview");
   const [cityFilter, setCityFilter] = useState("all");
+  const [userData, setUserData] = useState(null);
+  const [roleFilter, setRoleFilter] = useState("all");
 
   const load = useCallback(() => {
     api("/admin/stats").then(setStats).catch((e) => toast(e.message, true));
     api("/admin/gigs").then(setGigs).catch(() => {});
     api("/admin/issues").then(setIssues).catch(() => {});
     api("/admin/message-flags").then(setFlags).catch(() => {});
+    api("/admin/users").then(setUserData).catch(() => {});
   }, [toast]);
 
   useEffect(() => { load(); }, [load]);
@@ -180,7 +183,7 @@ export default function AdminDashboard({ toast }) {
 
       {/* Sub-tabs */}
       <div className="flex rounded-lg p-1" style={{ backgroundColor: C.maple }}>
-        {[["overview", "Overview"], ["issues", `Issues${stats.openIssues > 0 ? ` (${stats.openIssues})` : ""}`], ["flags", `Flags${unreviewedFlags.length > 0 ? ` (${unreviewedFlags.length})` : ""}`], ["gigs", "Recent gigs"]].map(([key, label]) => (
+        {[["overview", "Overview"], ["issues", `Issues${stats.openIssues > 0 ? ` (${stats.openIssues})` : ""}`], ["flags", `Flags${unreviewedFlags.length > 0 ? ` (${unreviewedFlags.length})` : ""}`], ["gigs", "Recent gigs"], ["users", "Users"]].map(([key, label]) => (
           <button key={key} onClick={() => setTab(key)}
             className="flex-1 rounded-md py-1.5 text-xs font-bold"
             style={tab === key ? { backgroundColor: C.navy, color: "#fff" } : { color: C.navy }}>
@@ -369,6 +372,57 @@ export default function AdminDashboard({ toast }) {
                 <div className="text-right shrink-0">
                   <div className="sg-num text-sm font-bold" style={{ color: C.navy }}>{money(g.pay_cents)}</div>
                   <div className="text-[10px] font-bold uppercase" style={{ color: g.status === "issue" ? C.red : C.ink40 }}>{g.status}</div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+        );
+      })()}
+
+      {tab === "users" && (() => {
+        const data = userData?.users || [];
+        const counts = userData?.counts || {};
+        const roles = ["Organizer", "Scorekeeper", "Both", "Organizer (setup)", "New"];
+        const shown = roleFilter === "all" ? data : data.filter((u) => u.role === roleFilter);
+        const badgeColor = (r) =>
+          r === "Organizer" ? C.amber :
+          r === "Scorekeeper" ? C.navy :
+          r === "Both" ? C.green : C.ink40;
+        return (
+        <div className="space-y-2">
+          <div>
+            <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide" style={{ color: C.ink60 }}>Filter by role</label>
+            <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}
+              className="w-full rounded-lg border px-3 py-2 text-sm bg-white" style={{ borderColor: C.mapleLine }}>
+              <option value="all">All ({data.length})</option>
+              {roles.map((r) => (
+                <option key={r} value={r}>{r} ({counts[r] || 0})</option>
+              ))}
+            </select>
+          </div>
+          {shown.length === 0 && (
+            <div className="rounded-xl border bg-white p-6 text-center text-sm" style={{ borderColor: C.mapleLine, color: C.ink60 }}>
+              {data.length === 0 ? "No users yet." : "No users in this role."}
+            </div>
+          )}
+          {shown.map((u) => (
+            <div key={u.id} className="rounded-xl border bg-white p-3" style={{ borderColor: C.mapleLine }}>
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="truncate font-bold" style={{ color: C.navy }}>{u.name}</div>
+                  <div className="truncate text-[11px]" style={{ color: C.ink60 }}>{u.email}</div>
+                  <div className="text-[11px]" style={{ color: C.ink40 }}>
+                    {u.city || "no city"}{u.sports.length ? ` · ${u.sports.join(", ")}` : ""}
+                  </div>
+                  <div className="text-[10px]" style={{ color: C.ink40 }}>
+                    {u.posted} posted · {u.claimed} claimed
+                  </div>
+                </div>
+                <div className="shrink-0 text-right">
+                  <span className="rounded-full px-2 py-0.5 text-[10px] font-bold text-white" style={{ backgroundColor: badgeColor(u.role) }}>
+                    {u.role}
+                  </span>
                 </div>
               </div>
             </div>

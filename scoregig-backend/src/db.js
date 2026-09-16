@@ -175,6 +175,7 @@ addColumn("ALTER TABLE gigs ADD COLUMN cancelled_by INTEGER");       // who canc
 addColumn("ALTER TABLE gigs ADD COLUMN cancel_reason TEXT");
 addColumn("ALTER TABLE gigs ADD COLUMN province TEXT");              // 2-letter code; drives the minimum-wage pay floor
 addColumn("ALTER TABLE gigs ADD COLUMN hidden_by_owner INTEGER DEFAULT 0");  // organizer removed a finished gig from their My Gigs list (Jul1 #7)
+addColumn("ALTER TABLE gigs ADD COLUMN notes TEXT");                 // organizer's operational notes to the scorekeeper (Bluetooth at rink, record shots on net, etc.)
 addColumn("ALTER TABLE users ADD COLUMN member_orgs TEXT");                  // sports orgs/associations the user belongs to, collected at signup (Jul1 #3)
 addColumn("ALTER TABLE users ADD COLUMN onboarding_submitted INTEGER DEFAULT 0"); // Stripe details submitted (#11)
 addColumn("ALTER TABLE users ADD COLUMN phone TEXT");                            // optional, for SMS notifications

@@ -172,11 +172,72 @@ async function sendSMS(user, gig, state, body) {
   }
 }
 
+// Human date/time in Pacific (the pilot's zone). Falls back gracefully.
+function fmtLocal(ms) {
+  try {
+    return new Date(ms).toLocaleString("en-CA", {
+      weekday: "short", month: "short", day: "numeric",
+      hour: "numeric", minute: "2-digit", timeZone: "America/Vancouver",
+    });
+  } catch { return "see app"; }
+}
+
+// The full gig detail block used in confirmation emails.
+function gigSummary(gig) {
+  const pay = `$${(gig.pay_cents / 100).toFixed(2)}`;
+  const arriveBy = fmtLocal(gig.start_at - 15 * 60 * 1000); // suggest arriving 15 min early
+  const rows = [
+    `  Game:      ${gig.title}`,
+    `  Sport:     ${gig.sport}`,
+    (gig.home_team || gig.away_team) ? `  Teams:     ${gig.home_team || "Home"} vs ${gig.away_team || "Away"}` : null,
+    `  Starts:    ${fmtLocal(gig.start_at)}`,
+    `  Arrive by: ${arriveBy}`,
+    `  Length:    ${gig.duration_min} min`,
+    gig.venue ? `  Venue:     ${gig.venue}` : null,
+    `  Location:  ${gig.area || gig.location}`,
+    gig.game_code ? `  Game code: ${gig.game_code}` : null,
+    `  Pay:       ${pay} to the scorekeeper`,
+    gig.notes ? `  Notes:     ${gig.notes}` : null,
+  ].filter(Boolean);
+  return rows.join("\n");
+}
+
 async function deliver(user, gig, state) {
-  // One simple, consistent message for both channels.
-  const body = `Your gig "${gig.title}" is now ${state}.`;
-  await sendEmail(user, gig, state, body);
-  await sendSMS(user, gig, state, body);
+  // SMS stays a short one-liner on every state. Email gets a full detail summary
+  // at the confirmation moment ("Claimed"), role-aware for organizer vs keeper.
+  const smsBody = `Your gig "${gig.title}" is now ${state}.`;
+  let emailBody = smsBody;
+  if (state === "Claimed") {
+    const isOwner = user.id === gig.owner_id;
+    const intro = isOwner
+      ? `Good news — "${gig.title}" is covered. Here are the details:`
+      : `You're confirmed for "${gig.title}". Here are the details:`;
+    const outro = isOwner
+      ? "We'll email you if anything changes."
+      : "Please arrive a few minutes early. Thanks for covering it!";
+    emailBody = `${intro}\n\n${gigSummary(gig)}\n\n${outro}`;
+  }
+  await sendEmail(user, gig, state, emailBody);
+  await sendSMS(user, gig, state, smsBody);
+}
+
+// Confirmation to the organizer the moment they post — a receipt of what went
+// live. One email covers the whole posting (a tournament posts many gigs).
+export async function sendPostConfirmation(ownerId, gigs) {
+  if (!Array.isArray(gigs) || gigs.length === 0) return;
+  const owner = db.prepare("SELECT id, email, notifications_enabled FROM users WHERE id = ?").get(ownerId);
+  if (!owner || !owner.notifications_enabled) return;
+  const n = gigs.length;
+  const header = n === 1
+    ? `Your gig is posted and live on ScoreGIG.`
+    : `Your ${n} gigs are posted and live on ScoreGIG.`;
+  const blocks = gigs.map((g) => gigSummary(g)).join("\n\n");
+  const body = `${header}\n\n${blocks}\n\nYou'll get an email the moment a scorekeeper is confirmed. Your card is only charged when you approve someone.`;
+  await emailUser({
+    user: owner, gigId: gigs[0].id, state: "Posted",
+    subject: n > 1 ? `${n} gigs posted on ScoreGIG` : "Your gig is posted on ScoreGIG",
+    body,
+  });
 }
 
 /**

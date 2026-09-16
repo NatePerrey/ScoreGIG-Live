@@ -124,6 +124,7 @@ export default function PostGig({ initial, onSubmit, onCancel, toast }) {
   });
   // Which roles to hire for (new posts only — a gig's role is fixed once created).
   const [services, setServices] = useState(initial?.service ? [initial.service] : ["scorekeeper"]);
+  const [notes, setNotes] = useState(initial?.notes || "");
   const toggleService = (k) => setServices((p) =>
     p.includes(k) ? (p.length > 1 ? p.filter((x) => x !== k) : p) : [...p, k]);
 
@@ -178,7 +179,7 @@ export default function PostGig({ initial, onSubmit, onCancel, toast }) {
       homeTeam: g.homeTeam || null, awayTeam: g.awayTeam || null,
 
     }));
-    onSubmit({ title, sport: finalSport, type, postedAs, services, games: gamesPayload }, editing ? initial.id : null);
+    onSubmit({ title, sport: finalSport, type, postedAs, services, games: gamesPayload, notes: notes.trim() || null }, editing ? initial.id : null);
   };
 
   const totalGigs = games.length * (editing ? 1 : services.length);
@@ -257,6 +258,16 @@ export default function PostGig({ initial, onSubmit, onCancel, toast }) {
             )}
           </div>
         )}
+
+        <div>
+          <label className={lbl} style={{ color: C.ink60 }}>Notes for the scorekeeper <span style={{ color: C.ink40 }}>(optional)</span></label>
+          <textarea className={input} style={{ borderColor: C.mapleLine, minHeight: "60px", resize: "vertical" }}
+            value={notes} onChange={(e) => setNotes(e.target.value)} maxLength={1000}
+            placeholder="e.g. Bluetooth speaker at the rink for music, or we'd like shots on net recorded." />
+          <p className="mt-1 text-[10px]" style={{ color: C.ink40 }}>
+            Rink details or requests — shared with whoever claims the gig.
+          </p>
+        </div>
       </div>
 
       {/* One game form per game */}

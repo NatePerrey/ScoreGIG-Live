@@ -88,6 +88,51 @@ admin.get("/admin/gigs", auth(), requireAdmin, (req, res) => {
   res.json(rows);
 });
 
+// Full user list with a role read (organizer / scorekeeper / both) inferred from
+// activity + resume, plus posted/claimed counts. Admin-only — real email shown
+// so the owner can do outreach. Ordered newest-signup first (id proxies signup
+// order, since users has no created_at).
+admin.get("/admin/users", auth(), requireAdmin, (req, res) => {
+  const rows = db.prepare(`
+    SELECT u.id, u.display_name, u.name, u.email, u.city, u.sports, u.games_worked,
+           u.stripe_account_id, u.stripe_customer_id,
+           (SELECT COUNT(*) FROM gigs WHERE owner_id = u.id) AS posted,
+           (SELECT COUNT(*) FROM gigs WHERE claimed_by = u.id) AS claimed
+    FROM users u
+    ORDER BY u.id DESC
+    LIMIT 500
+  `).all();
+
+  const out = rows.map((u) => {
+    let sports = [];
+    try { sports = u.sports ? JSON.parse(u.sports) : []; } catch { sports = []; }
+    const worked = String(u.games_worked || "0").replace("+", "");
+    const keeperResume =
+      sports.length > 0 || Boolean(u.stripe_account_id) || (Number(worked) > 0);
+    let role;
+    if (u.posted > 0 && (u.claimed > 0 || keeperResume)) role = "Both";
+    else if (u.posted > 0) role = "Organizer";
+    else if (u.claimed > 0 || keeperResume) role = "Scorekeeper";
+    else if (u.stripe_customer_id) role = "Organizer (setup)";
+    else role = "New";
+    return {
+      id: u.id,
+      name: u.display_name || u.name || "—",
+      email: u.email,
+      city: u.city || "",
+      sports,
+      gamesWorked: u.games_worked || "0",
+      posted: u.posted,
+      claimed: u.claimed,
+      role,
+    };
+  });
+
+  // Small summary so the owner sees the split at a glance.
+  const counts = out.reduce((a, u) => { a[u.role] = (a[u.role] || 0) + 1; return a; }, {});
+  res.json({ users: out, counts });
+});
+
 const REASON_LABELS = {
   left_early: "Scorekeeper left early",
   no_show_late: "Showed up very late",

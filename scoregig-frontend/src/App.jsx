@@ -125,6 +125,42 @@ export default function App() {
     api("/me").then(setMe).catch(() => { setToken(null); setAuthed(false); });
   }, []);
 
+  // Central sign-out — used by the header button, the idle timer, and any 401.
+  const logout = useCallback((reason) => {
+    setToken(null);
+    setAuthed(false);
+    setMe(null);
+    if (reason) toast(reason);
+  }, [toast]);
+
+  // Auto sign-out after 2 hours of inactivity. The timer resets on any real
+  // interaction, so someone actively posting or claiming is never interrupted;
+  // only a session left idle on a (possibly shared) device gets signed out.
+  useEffect(() => {
+    if (!authed) return;
+    const IDLE_MS = 2 * 60 * 60 * 1000; // 2 hours
+    let timer;
+    const reset = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => logout("Signed out after 2 hours of inactivity."), IDLE_MS);
+    };
+    const events = ["mousedown", "keydown", "touchstart", "scroll", "visibilitychange"];
+    events.forEach((e) => window.addEventListener(e, reset, { passive: true }));
+    reset();
+    return () => {
+      clearTimeout(timer);
+      events.forEach((e) => window.removeEventListener(e, reset));
+    };
+  }, [authed, logout]);
+
+  // If any request comes back 401 (expired/invalid token), sign out cleanly
+  // instead of leaving the user staring at error toasts. api.js fires this.
+  useEffect(() => {
+    const onSignout = () => logout("Session expired — please sign in again.");
+    window.addEventListener("scoregig:signout", onSignout);
+    return () => window.removeEventListener("scoregig:signout", onSignout);
+  }, [logout]);
+
   const refreshGigs = useCallback(() => {
     api("/gigs?mine=1").then(setMyGigs).catch((e) => toast(e.message, true));
     api(`/gigs?lat=${viewer.lat}&lng=${viewer.lng}&radiusKm=${radius}`)
@@ -256,7 +292,7 @@ export default function App() {
         <div className="mx-auto flex max-w-md items-center justify-between">
           <button onClick={() => { setEditing(null); setTab("gigs"); }}
             className="sg-display text-2xl text-white">SCORE<span style={{ color: C.amber }}>GIG</span></button>
-          <button onClick={() => { setToken(null); setAuthed(false); setMe(null); }}
+          <button onClick={() => logout()}
             className="rounded-full px-2.5 py-1 text-[11px] font-bold"
             style={{ backgroundColor: "rgba(255,255,255,0.12)", color: "#fff" }}>
             {(me.displayName || me.name).split(" ")[0]} · Sign out

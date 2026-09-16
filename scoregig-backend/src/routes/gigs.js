@@ -12,7 +12,7 @@ import { auth } from "../auth.js";
 import { checkClean } from "../clean.js";
 import { guardianBlocked } from "../guardian.js";
 import { minPayCents, isValidProvince, PROVINCES, MIN_WAGE_CENTS, FLAT_MIN_CENTS, MIN_WAGE_AS_OF } from "../pricing.js";
-import { notifyGigState } from "../notify.js";
+import { notifyGigState, sendPostConfirmation } from "../notify.js";
 import { broadcastNewGig } from "../broadcast.js";
 import { cancellationStanding } from "../reliability.js";
 
@@ -83,6 +83,9 @@ gigs.post("/gigs", auth(), (req, res) => {
     return res.status(403).json({ error: "Your account is waiting for parent/guardian approval. Once they confirm the email we sent, you can post and request gigs." });
   }
   const { title, sport, type, postedAs, games } = req.body;
+  // Organizer's operational notes to the scorekeeper (Bluetooth at the rink,
+  // record shots on net, etc.). Posting-level: applied to every gig created here.
+  const notes = String(req.body.notes || "").slice(0, 1000).trim() || null;
 
   if (!req.user.default_payment_method) {
     return res.status(402).json({ error: "Save a payment card before posting a gig." });
@@ -138,12 +141,12 @@ gigs.post("/gigs", auth(), (req, res) => {
       if (services.length > 1) gameTitle += ` · ${SERVICE_LABEL[service]}`;
       const info = db.prepare(`
         INSERT INTO gigs (owner_id, title, posted_as, sport, type, service, venue, game_code, location, area, lat, lng,
-                          start_at, duration_min, pay_cents, fee_cents, home_team, away_team, province, tournament_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                          start_at, duration_min, pay_cents, fee_cents, home_team, away_team, province, tournament_id, notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(req.user.id, gameTitle, postedAs, sport, type || "single", service,
              g.venue || null, g.gameCode || null, g.location, g.area || null, g.lat ?? null, g.lng ?? null,
              g.startAt, g.durationMin || 60, g.payCents, feeCents,
-             g.homeTeam || null, g.awayTeam || null, String(g.province || "").toUpperCase(), tournamentId);
+             g.homeTeam || null, g.awayTeam || null, String(g.province || "").toUpperCase(), tournamentId, notes);
       logEvent(info.lastInsertRowid, "auth", "Card on file · charged only when you approve someone");
       created.push(gigWithEvents(info.lastInsertRowid));
     }
@@ -152,6 +155,9 @@ gigs.post("/gigs", auth(), (req, res) => {
   // Ping matching scorekeepers that a new gig just opened (fire-and-forget so
   // it never blocks the organizer's post from returning).
   for (const g of created) broadcastNewGig(g.id);
+
+  // Email the organizer a receipt of what they just posted (fire-and-forget).
+  sendPostConfirmation(req.user.id, created).catch((e) => console.error("post-confirmation error:", e.message));
 
   res.status(201).json(created.length === 1 ? created[0] : created);
 });
@@ -173,13 +179,16 @@ gigs.patch("/gigs/:id", auth(), (req, res) => {
   }
 
   const feeCents = Math.round((f.pay_cents * FEE_PERCENT) / 100);
+  const notes = req.body.notes !== undefined
+    ? (String(req.body.notes || "").slice(0, 1000).trim() || null)
+    : (gig.notes ?? null);
   db.prepare(`
     UPDATE gigs SET title=?, sport=?, type=?, games=?, venue=?, game_code=?, location=?, area=?, lat=?, lng=?,
-                    start_at=?, duration_min=?, pay_cents=?, fee_cents=?, home_team=?, away_team=?, province=?
+                    start_at=?, duration_min=?, pay_cents=?, fee_cents=?, home_team=?, away_team=?, province=?, notes=?
     WHERE id=?
   `).run(f.title, f.sport, f.type, f.games, f.venue ?? null, f.game_code ?? null, f.location, f.area, f.lat, f.lng,
          f.start_at, f.duration_min, f.pay_cents, feeCents,
-         f.home_team ?? null, f.away_team ?? null, prov || null, gig.id);
+         f.home_team ?? null, f.away_team ?? null, prov || null, notes, gig.id);
 
   if (f.pay_cents !== gig.pay_cents) {
     logEvent(gig.id, "auth", `Gig edited · new pay $${(f.pay_cents / 100).toFixed(2)} CAD`);

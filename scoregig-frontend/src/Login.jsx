@@ -91,8 +91,8 @@ export default function Login({ onAuthed }) {
       <div className="w-full max-w-sm space-y-4">
         <div className="text-center">
           <div className="sg-display text-4xl text-white">SCORE<span style={{ color: C.amber }}>GIG</span></div>
-          <p className="mt-1 text-sm" style={{ color: "rgba(255,255,255,0.6)" }}>
-            Scorekeepers wanted. Paid, badged, bragged.
+          <p className="mt-1 text-sm font-semibold tracking-wide" style={{ color: "rgba(255,255,255,0.75)" }}>
+            GET PAID TO KEEP SCORE
           </p>
         </div>
 
