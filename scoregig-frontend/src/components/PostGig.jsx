@@ -1,6 +1,8 @@
 // PostGig.jsx — create or edit a gig. For single games, one form. For multi/
-// tournament, a separate game entry per game (each with its own time, location,
-// pay, and optional home/away teams). Each game becomes its own gig record.
+// tournament, a shared header (venue, city, duration, pay — set once, applied
+// to every game) plus a stripped-down row per game (teams, date/time, optional
+// game code). Editing always edits one existing game via the full form below,
+// since a gig record is always a single game regardless of how it was posted.
 import { useState, useEffect } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { C, GIG_TYPES, SPORTS, SERVICES } from "../theme.js";
@@ -24,6 +26,7 @@ const blankGame = () => ({
   durationMin: 60, pay: 30, homeTeam: "", awayTeam: "",
 });
 
+// Full per-game form — single-gig mode and editing only (always exactly one game).
 function GameForm({ game, idx, onChange, onRemove, canRemove, lbl, input, toast, minCents }) {
   const set = (k, v) => onChange(idx, k, v);
   return (
@@ -108,6 +111,71 @@ function GameForm({ game, idx, onChange, onRemove, canRemove, lbl, input, toast,
   );
 }
 
+// Stripped-down row for tournament/multi mode. Venue, city, duration, and pay
+// live once in the shared header above — a row only needs what's unique per
+// game: the teams, the date/time, and (if the header toggle is on) a per-game
+// code. Brackets often aren't set when a tournament first goes up, so blank
+// team/code fields get a "before game day" hint instead of looking incomplete.
+function GameRow({ game, idx, onChange, onRemove, canRemove, lbl, input, showGameCode }) {
+  const set = (k, v) => onChange(idx, k, v);
+  const teamsBlank = !game.homeTeam && !game.awayTeam;
+  return (
+    <div className="rounded-xl border p-3 space-y-2" style={{ borderColor: C.mapleLine }}>
+      <div className="flex items-center justify-between">
+        <div className="text-xs font-bold uppercase tracking-wide" style={{ color: C.navy }}>
+          Game {idx + 1}
+        </div>
+        {canRemove && (
+          <button onClick={() => onRemove(idx)} className="text-xs font-bold" style={{ color: C.red }}>
+            <Trash2 size={14} />
+          </button>
+        )}
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className={lbl} style={{ color: C.ink60 }}>Home team</label>
+          <input className={input} style={{ borderColor: C.mapleLine }} value={game.homeTeam}
+            onChange={(e) => set("homeTeam", e.target.value)} placeholder="e.g. Chilliwack Chiefs" />
+        </div>
+        <div>
+          <label className={lbl} style={{ color: C.ink60 }}>Away team</label>
+          <input className={input} style={{ borderColor: C.mapleLine }} value={game.awayTeam}
+            onChange={(e) => set("awayTeam", e.target.value)} placeholder="e.g. Abbotsford Hawks" />
+        </div>
+      </div>
+      {teamsBlank && (
+        <p className="text-[10px]" style={{ color: C.ink40 }}>
+          Don't know the teams yet? You can add them anytime before game day.
+        </p>
+      )}
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className={lbl} style={{ color: C.ink60 }}>Date</label>
+          <input type="date" className={input} style={{ borderColor: C.mapleLine }} value={game.date}
+            onChange={(e) => set("date", e.target.value)} />
+        </div>
+        <div>
+          <label className={lbl} style={{ color: C.ink60 }}>Start time</label>
+          <input type="time" className={input} style={{ borderColor: C.mapleLine }} value={game.time}
+            onChange={(e) => set("time", e.target.value)} />
+        </div>
+      </div>
+      {showGameCode && (
+        <div>
+          <label className={lbl} style={{ color: C.ink60 }}>Game code <span style={{ color: C.ink40 }}>(optional)</span></label>
+          <input className={input} style={{ borderColor: C.mapleLine }} value={game.gameCode}
+            onChange={(e) => set("gameCode", e.target.value)} placeholder="Game code" />
+          {!game.gameCode && (
+            <p className="mt-1 text-[10px]" style={{ color: C.ink40 }}>
+              Don't have it yet? Add it anytime before game day — it's shared with the scorekeeper once they're confirmed.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function PostGig({ initial, onSubmit, onCancel, toast }) {
   const editing = !!initial;
   const [title, setTitle] = useState(initial?.title?.replace(/ \u2014 Game \d+$/, "") || "");
@@ -140,6 +208,20 @@ export default function PostGig({ initial, onSubmit, onCancel, toast }) {
   const [singleRole, setSingleRole] = useState(editing && initial?.type === "single" ? (initial.service || "scorekeeper") : null);
   const [bothRoles, setBothRoles] = useState(false);
   const [paySheet, setPaySheet] = useState(30); // scoresheet pay ($) when both roles picked
+
+  // Tournament header (piece 2): venue, city, duration, and pay set ONCE and
+  // applied to every game row below. Only used for new multi-game postings —
+  // editing always edits one existing game via the full GameForm above.
+  const [tourVenue, setTourVenue] = useState("");
+  const [tourPlace, setTourPlace] = useState(null);
+  const [tourDuration, setTourDuration] = useState(60);
+  const [tourPay, setTourPay] = useState(30);
+  // Whether this tournament uses per-game digital scoresheet codes at all (piece 3).
+  // Defaults on since that's the prior behaviour; associations that don't use one
+  // (e.g. no RAMP Gamesheet) can turn it off to drop the field from every row.
+  const [tourUsesGameCode, setTourUsesGameCode] = useState(true);
+  const isHeaderMode = mode !== "single" && !editing;
+
   const toggleService = (k) => setServices((p) =>
     p.includes(k) ? (p.length > 1 ? p.filter((x) => x !== k) : p) : [...p, k]);
 
@@ -173,8 +255,8 @@ export default function PostGig({ initial, onSubmit, onCancel, toast }) {
   // Mirror the backend's minPayCents(province, durationMin): max(flat floor,
   // minimum wage prorated to the game length). Falls back to the flat floor
   // until a province is picked or the rates load.
-  const minCentsFor = (g) => {
-    const mins = Number(g.durationMin) || 60;
+  const minCentsFor = (durationMin) => {
+    const mins = Number(durationMin) || 60;
     const flat = wage.flatMinCents || 2000;
     const rate = (wage.rates && wage.rates[province]) || 0;
     if (!rate) return flat;
@@ -188,18 +270,40 @@ export default function PostGig({ initial, onSubmit, onCancel, toast }) {
     : services;
 
   const roleValid = mode === "single" ? (bothRoles || !!singleRole) : services.length > 0;
-  const sheetMin = minCentsFor(games[0] || { durationMin: 60 });
+  const sheetMin = minCentsFor(games[0]?.durationMin || 60);
   const sheetPayValid = !(mode === "single" && bothRoles) || Math.round((Number(paySheet) || 0) * 100) >= sheetMin;
 
-  const allValid = title && postedAs && province && roleValid && sheetPayValid && games.every((g) => {
-    const startMs = g.date && g.time ? new Date(`${g.date}T${g.time}`).getTime() : null;
-    return g.location && g.place && startMs && startMs > Date.now()
-      && Math.round((Number(g.pay) || 0) * 100) >= minCentsFor(g);
-  });
+  // Header-mode pay floor, mirrors the per-game one above but off the shared duration.
+  const headerMinCents = minCentsFor(tourDuration);
+  const headerPayValid = Math.round((Number(tourPay) || 0) * 100) >= headerMinCents;
+
+  const allValid = title && postedAs && province && roleValid && sheetPayValid && (
+    isHeaderMode
+      ? !!tourPlace && headerPayValid && games.every((g) => {
+          const startMs = g.date && g.time ? new Date(`${g.date}T${g.time}`).getTime() : null;
+          return startMs && startMs > Date.now();
+        })
+      : games.every((g) => {
+          const startMs = g.date && g.time ? new Date(`${g.date}T${g.time}`).getTime() : null;
+          return g.location && g.place && startMs && startMs > Date.now()
+            && Math.round((Number(g.pay) || 0) * 100) >= minCentsFor(g.durationMin);
+        })
+  );
 
   const submit = () => {
     const finalSport = sport === "Other" && otherSport.trim() ? `Other: ${otherSport.trim()}` : sport;
     const gamesPayload = games.map((g) => {
+      if (isHeaderMode) {
+        return {
+          venue: tourVenue.trim() || null, gameCode: (tourUsesGameCode && g.gameCode) || null,
+          location: tourPlace.name, area: tourPlace.name, lat: tourPlace.lat, lng: tourPlace.lng,
+          startAt: new Date(`${g.date}T${g.time}`).getTime(),
+          durationMin: Number(tourDuration) || 60,
+          payCents: Math.round(tourPay * 100),
+          province,
+          homeTeam: g.homeTeam || null, awayTeam: g.awayTeam || null,
+        };
+      }
       const row = {
         venue: g.venue || null, gameCode: g.gameCode || null,
         location: g.location, area: g.place.name, lat: g.place.lat, lng: g.place.lng,
@@ -380,18 +484,69 @@ export default function PostGig({ initial, onSubmit, onCancel, toast }) {
         </div>
       </div>
 
-      {/* One game form per game */}
+      {/* Tournament header (piece 2): venue, city, duration, pay — set once here, applied to every game row below */}
+      {isHeaderMode && (
+        <div className="rounded-xl border bg-white p-4 space-y-3" style={{ borderColor: C.amber }}>
+          <div className="text-xs font-bold uppercase tracking-wide" style={{ color: C.amber }}>
+            Applies to every game below
+          </div>
+          <div>
+            <label className={lbl} style={{ color: C.ink60 }}>Venue / facility</label>
+            <input className={input} style={{ borderColor: tourVenue ? C.green : C.mapleLine }} value={tourVenue}
+              onChange={(e) => setTourVenue(e.target.value)} placeholder="e.g. Chilliwack Coliseum" />
+            <p className="mt-1 text-[10px]" style={{ color: C.ink40 }}>
+              The rink, court, gym, or complex hosting all of these games.
+            </p>
+          </div>
+          <div>
+            <label className={lbl} style={{ color: C.ink60 }}>City / area <span style={{ color: C.ink40 }}>(for map & distance)</span></label>
+            <CitySearch value={tourPlace} onSelect={(p) => setTourPlace(p)} toast={toast} />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className={lbl} style={{ color: C.ink60 }}>Duration (min)</label>
+              <select className={input} style={{ borderColor: C.mapleLine }} value={tourDuration}
+                onChange={(e) => setTourDuration(Number(e.target.value))}>
+                {[30,45,60,75,90,120,150,180].map((m) => (
+                  <option key={m} value={m}>{m < 60 ? `${m} min` : m === 60 ? "1 hr" : `${Math.floor(m/60)}h ${m%60 > 0 ? `${m%60}m` : ""}`}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className={lbl} style={{ color: C.ink60 }}>Pay per game (CAD)</label>
+              <input type="number" min={Math.ceil(headerMinCents / 100)} step={1} className={input}
+                style={{ borderColor: headerPayValid ? C.mapleLine : C.red }}
+                value={tourPay} onChange={(e) => setTourPay(Number(e.target.value))} />
+              <p className="mt-1 text-[10px]" style={{ color: headerPayValid ? C.ink40 : C.red }}>
+                Minimum for this length &amp; province: ${(headerMinCents / 100).toFixed(2)} (at least minimum wage)
+              </p>
+            </div>
+          </div>
+          <label className="flex items-center gap-2 text-xs font-semibold" style={{ color: C.navy }}>
+            <input type="checkbox" checked={tourUsesGameCode} onChange={(e) => setTourUsesGameCode(e.target.checked)} />
+            This tournament uses game codes (e.g. RAMP Gamesheet)
+          </label>
+        </div>
+      )}
+
+      {/* One row per game (header mode), or a full form per game (single/editing) */}
       <div className="space-y-3">
         {games.map((game, idx) => (
-          <GameForm key={idx} game={game} idx={idx} onChange={updateGame}
-            onRemove={removeGame} canRemove={games.length > 1}
-            lbl={lbl} input={input} toast={toast} minCents={minCentsFor(game)} />
+          isHeaderMode ? (
+            <GameRow key={idx} game={game} idx={idx} onChange={updateGame}
+              onRemove={removeGame} canRemove={games.length > 1} lbl={lbl} input={input}
+              showGameCode={tourUsesGameCode} />
+          ) : (
+            <GameForm key={idx} game={game} idx={idx} onChange={updateGame}
+              onRemove={removeGame} canRemove={games.length > 1}
+              lbl={lbl} input={input} toast={toast} minCents={minCentsFor(game.durationMin)} />
+          )
         ))}
         {type !== "single" && (
           <button onClick={addGame}
             className="flex w-full items-center justify-center gap-2 rounded-xl border py-2.5 text-sm font-bold"
             style={{ borderColor: C.amber, color: C.amber }}>
-            <Plus size={16} /> Add another game
+            <Plus size={16} /> {isHeaderMode && tourVenue.trim() ? `Add another game to ${tourVenue.trim()}` : "Add another game"}
           </button>
         )}
       </div>

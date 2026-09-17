@@ -209,6 +209,11 @@ addColumn("ALTER TABLE users ADD COLUMN guardian_consent_ip TEXT");             
 addColumn("ALTER TABLE users ADD COLUMN reset_token TEXT");     // single-use password reset token
 addColumn("ALTER TABLE users ADD COLUMN reset_expires INTEGER"); // token expiry (ms epoch)
 
+// Reminder-digest job (piece 4): bitmask of which upcoming-game milestones have
+// already been sent for a claimed gig, so a restart or a slow tick never
+// double-sends. Bits: 1=5-day, 2=48-hour, 4=24-hour, 8=morning-of.
+addColumn("ALTER TABLE gigs ADD COLUMN reminder_flags INTEGER NOT NULL DEFAULT 0");
+
 export function logEvent(gigId, kind, label) {
   db.prepare(
     "INSERT INTO gig_events (gig_id, t, kind, label) VALUES (?, ?, ?, ?)"

@@ -18,6 +18,7 @@ import { messages } from "./routes/messages.js";
 import { contact } from "./routes/contact.js";
 import { startReleaseJob, releaseDuePayments } from "./jobs/release.js";
 import { startMessageCleanupJob } from "./jobs/cleanupMessages.js";
+import { startReminderJob, runReminderDigest } from "./jobs/reminders.js";
 import { applyInboundSms, verifyTwilioSignature } from "./notify.js";
 import { userByConsentToken, confirmConsent } from "./guardian.js";
 import { userByResetToken, applyResetHash } from "./passwordReset.js";
@@ -303,6 +304,21 @@ app.post("/internal/run-release", async (req, res) => {
   }
 });
 
+// Internal reminder-digest trigger, same pattern as run-release above. Only
+// useful when REMINDER_SCHEDULER=external; harmless otherwise.
+app.post("/internal/run-reminders", async (req, res) => {
+  const secret = process.env.INTERNAL_API_SECRET;
+  if (!secret || req.get("x-internal-secret") !== secret) {
+    return res.status(403).json({ error: "forbidden" });
+  }
+  try {
+    const result = await runReminderDigest();
+    res.json({ ok: true, ...result });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
 const port = process.env.PORT || 4000;
@@ -310,4 +326,5 @@ app.listen(port, () => {
   console.log(`ScoreGIG API running on http://localhost:${port}`);
   startReleaseJob();
   startMessageCleanupJob();
+  startReminderJob();
 });
