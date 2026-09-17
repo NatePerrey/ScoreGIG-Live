@@ -1,8 +1,0 @@
-@import "tailwindcss";
-
-.sg-display { font-family: "Anton", "Arial Narrow", sans-serif; letter-spacing: 0.04em; }
-.sg-num { font-variant-numeric: tabular-nums; }
-
-@media (prefers-reduced-motion: reduce) {
-  * { transition: none !important; animation: none !important; }
-}

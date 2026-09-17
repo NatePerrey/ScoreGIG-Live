@@ -217,7 +217,7 @@ export default function Profile({ me, myGigs, toast, refreshMe }) {
             <button onClick={onboard} className="w-full rounded-lg py-2.5 font-bold text-white" style={{ backgroundColor: C.navy }}>
               Set up payouts with Stripe
             </button>
-            <p className="mt-1 text-[11px] text-center" style={{ color: C.ink60 }}>This may take a few minutes to approve and link.</p>
+            <p className="mt-1 text-[11px] text-center" style={{ color: C.ink60 }}>Setup usually only takes a couple of minutes, but occasionally Stripe needs extra verification, so it's best to complete this as soon as you sign up rather than waiting until right before your first gig.</p>
             <button onClick={() => recheck(false)} disabled={rechecking}
               className="flex w-full items-center justify-center gap-2 text-xs font-semibold disabled:opacity-70" style={{ color: C.ink60 }}>
               {rechecking && <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />}

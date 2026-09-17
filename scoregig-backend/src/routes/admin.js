@@ -71,6 +71,24 @@ admin.get("/admin/stats", auth(), requireAdmin, (req, res) => {
   });
 });
 
+// Recent notification attempts with their actual provider error text — the
+// /admin/stats counts tell you *how many* failed, this tells you *why*. Most
+// useful filtered to ?status=failed. Defaults to the last 50 across all
+// statuses, newest first.
+admin.get("/admin/notifications", auth(), requireAdmin, (req, res) => {
+  const status = (req.query.status || "").trim();
+  const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+  const rows = db.prepare(`
+    SELECT n.id, n.user_id, u.email AS user_email, n.gig_id, n.channel,
+           n.to_addr, n.state, n.status, n.detail, n.t
+    FROM notifications n
+    LEFT JOIN users u ON u.id = n.user_id
+    ${status ? "WHERE n.status = @status" : ""}
+    ORDER BY n.t DESC LIMIT @limit
+  `).all(status ? { status, limit } : { limit });
+  res.json(rows);
+});
+
 // Recent gigs list for the dashboard table. Grouped by city (area), then most
 // recent first within each city. Optional ?area= filters to one city.
 admin.get("/admin/gigs", auth(), requireAdmin, (req, res) => {
