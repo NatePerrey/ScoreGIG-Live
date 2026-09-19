@@ -48,7 +48,7 @@ export default function GigCard({ gig, me, viewer, onAction, onBadge, onEdit, on
   // Organizer can cancel their gig anytime before payout/completion.
   const canOwnerCancel = ownedByMe && ["open", "pending", "claimed", "arrived"].includes(gig.status);
   // Organizer can remove a finished/worked/cancelled gig from their own list.
-  const canDismiss = ownedByMe && ["completed", "paid", "no_show", "cancelled"].includes(gig.status);
+  const canDismiss = ownedByMe && ["completed", "paid", "no_show", "cancelled", "expired"].includes(gig.status);
   const dist = viewer && gig.lat != null ? kmBetween(viewer, gig) : null;
   const svc = serviceLabel(gig.service);
   // Once "release now" is pressed, release_at is set to now and the payout job
@@ -71,6 +71,7 @@ export default function GigCard({ gig, me, viewer, onAction, onBadge, onEdit, on
     no_show: ["No-show", "#fff", C.red],
     issue: ["Issue reported", "#fff", C.red],
     cancelled: ["Cancelled", "#fff", C.red],
+    expired: ["Expired — no one claimed it", "#fff", C.ink40],
   }[gig.status];
 
   return (

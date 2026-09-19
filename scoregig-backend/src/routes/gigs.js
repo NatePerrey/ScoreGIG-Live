@@ -463,9 +463,9 @@ gigs.post("/gigs/:id/cancel", auth(), async (req, res) => {
 gigs.post("/gigs/:id/dismiss", auth(), (req, res) => {
   const gig = db.prepare("SELECT * FROM gigs WHERE id = ?").get(req.params.id);
   if (!gig || gig.owner_id !== req.user.id) return res.status(404).json({ error: "Gig not found." });
-  const dismissible = ["completed", "paid", "no_show", "cancelled"];
+  const dismissible = ["completed", "paid", "no_show", "cancelled", "expired"];
   if (!dismissible.includes(gig.status)) {
-    return res.status(409).json({ error: "Only finished, worked, or cancelled gigs can be removed from your list." });
+    return res.status(409).json({ error: "Only finished, worked, cancelled, or expired gigs can be removed from your list." });
   }
   db.prepare("UPDATE gigs SET hidden_by_owner=1 WHERE id=?").run(gig.id);
   res.json({ ok: true, id: gig.id });

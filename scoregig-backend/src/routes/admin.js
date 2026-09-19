@@ -62,6 +62,7 @@ admin.get("/admin/stats", auth(), requireAdmin, (req, res) => {
       no_show: counts.no_show || 0,
       issue: counts.issue || 0,
       cancelled: counts.cancelled || 0,
+      expired: counts.expired || 0,
     },
     money: {
       paidOutToScorekeepersCents: paid.pay,

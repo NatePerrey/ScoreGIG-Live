@@ -19,6 +19,7 @@ import { contact } from "./routes/contact.js";
 import { startReleaseJob, releaseDuePayments } from "./jobs/release.js";
 import { startMessageCleanupJob } from "./jobs/cleanupMessages.js";
 import { startReminderJob, runReminderDigest } from "./jobs/reminders.js";
+import { startExpireGigsJob } from "./jobs/expireGigs.js";
 import { applyInboundSms, verifyTwilioSignature } from "./notify.js";
 import { userByConsentToken, confirmConsent } from "./guardian.js";
 import { userByResetToken, applyResetHash } from "./passwordReset.js";
@@ -327,4 +328,5 @@ app.listen(port, () => {
   startReleaseJob();
   startMessageCleanupJob();
   startReminderJob();
+  startExpireGigsJob();
 });
