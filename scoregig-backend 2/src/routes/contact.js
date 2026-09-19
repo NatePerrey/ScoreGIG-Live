@@ -65,5 +65,24 @@ ${message}
     console.error("contact: send failed:", result.detail);
     return res.status(502).json({ error: "Couldn't send your message right now. Please try again in a bit." });
   }
+
+  // Auto-acknowledge to the submitter so they know it landed, even if Nate
+  // doesn't reply right away. Best-effort: never blocks or fails the request —
+  // the form already succeeded from the user's point of view once the support
+  // email above went out.
+  sendRawEmail({
+    to: email,
+    subject: "We got your message — ScoreGIG",
+    text:
+`Hi ${name},
+
+Thanks for reaching out — this confirms we've received your message, and Nate will get back to you shortly.
+
+For reference, here's what you sent:
+"${message}"
+
+— ScoreGIG`,
+  }).catch((err) => console.error("contact: auto-ack failed:", err.message));
+
   res.json({ ok: true });
 });
