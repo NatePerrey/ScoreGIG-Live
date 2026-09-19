@@ -1,0 +1,293 @@
+// notify.js — gig-state notifications over email (always) and SMS (if a phone
+// is on file). Every gig-clock state change calls notifyGigState(), which
+// messages both the organizer and the scorekeeper.
+//
+// Providers are wired but inert until you add API keys to the environment:
+//   Email  -> SendGrid:  SENDGRID_API_KEY, SENDGRID_FROM
+//   SMS    -> Twilio:     TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM
+// With no keys set, messages are logged and recorded as 'pending-setup' so the
+// whole flow is testable now; flip it live later by setting the env vars.
+
+import { db } from "./db.js";
+import crypto from "crypto";
+
+const STOP_WORDS = new Set(["STOP", "STOPALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT"]);
+const START_WORDS = new Set(["START", "YES", "UNSTOP"]);
+const digitsOnly = (s) => String(s || "").replace(/\D/g, "");
+
+// Process an inbound text. STOP-type keywords opt the user out of SMS; START-type
+// keywords opt them back in. Matches on the last 10 digits so stored formats like
+// "+1 587 555 1234" still line up with Twilio's E.164 "+15875551234".
+export function applyInboundSms(fromPhone, body) {
+  const word = String(body || "").trim().toUpperCase();
+  const isStop = STOP_WORDS.has(word);
+  const isStart = START_WORDS.has(word);
+  if (!isStop && !isStart) return null;
+  const last10 = digitsOnly(fromPhone).slice(-10);
+  if (!last10) return null;
+  const rows = db.prepare("SELECT id, phone FROM users WHERE phone IS NOT NULL AND phone != ''").all();
+  const match = rows.find((r) => digitsOnly(r.phone).slice(-10) === last10);
+  if (!match) return null;
+  db.prepare("UPDATE users SET sms_opted_out = ? WHERE id = ?").run(isStop ? 1 : 0, match.id);
+  console.log(`[notify:sms inbound] ${isStop ? "STOP" : "START"} from user ${match.id}`);
+  return { userId: match.id, optedOut: isStop };
+}
+
+// Verify Twilio's request signature so a stranger can't toggle opt-out state.
+// Skips (returns true) when not configured, so local testing still works.
+export function verifyTwilioSignature(req) {
+  const token = process.env.TWILIO_AUTH_TOKEN;
+  const url = process.env.TWILIO_WEBHOOK_URL;
+  if (!token || !url) return true; // not configured yet → allow (dev/testing)
+  const signature = req.header("X-Twilio-Signature") || "";
+  const params = req.body || {};
+  const data = url + Object.keys(params).sort().map((k) => k + params[k]).join("");
+  const expected = crypto.createHmac("sha1", token).update(Buffer.from(data, "utf-8")).digest("base64");
+  try {
+    return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+  } catch {
+    return false;
+  }
+}
+
+const EMAIL_READY = () => Boolean(process.env.SENDGRID_API_KEY && process.env.SENDGRID_FROM);
+const SMS_READY = () =>
+  Boolean(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_FROM);
+
+function record(userId, gigId, channel, toAddr, state, status, detail) {
+  try {
+    db.prepare(
+      "INSERT INTO notifications (user_id, gig_id, channel, to_addr, state, status, detail, t) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    ).run(userId, gigId, channel, toAddr || null, state, status, detail || null, Date.now());
+  } catch (e) {
+    console.error("notify: failed to record", e.message);
+  }
+}
+
+/* ------------------------------- EMAIL ----------------------------------- */
+// Low-level, reusable email send. Handles the not-configured-yet path, the
+// SendGrid POST, and the notifications-log record. Used both by gig-state
+// notifications (fixed "ScoreGIG update" subject) and by new-gig broadcasts
+// (their own subject line). Never throws.
+export async function emailUser({ user, gigId = null, state = "", subject = "ScoreGIG update", body }) {
+  if (!user || !user.email) return;
+  if (!EMAIL_READY()) {
+    console.log(`[notify:email pending-setup] -> ${user.email}: ${subject}`);
+    record(user.id, gigId, "email", user.email, state, "pending-setup");
+    return;
+  }
+  try {
+    const res = await fetch("https://api.sendgrid.com/v3/mail/send", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.SENDGRID_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        personalizations: [{ to: [{ email: user.email }] }],
+        from: { email: process.env.SENDGRID_FROM, name: "ScoreGIG" },
+        reply_to: { email: process.env.SUPPORT_EMAIL || "nathanperrey@scoregig.ca" },
+        subject,
+        content: [{ type: "text/plain", value: body }],
+      }),
+    });
+    if (res.ok) {
+      record(user.id, gigId, "email", user.email, state, "sent");
+    } else {
+      const txt = await res.text().catch(() => "");
+      record(user.id, gigId, "email", user.email, state, "failed", `${res.status} ${txt}`.slice(0, 200));
+    }
+  } catch (err) {
+    record(user.id, gigId, "email", user.email, state, "failed", String(err.message).slice(0, 200));
+  }
+}
+
+async function sendEmail(user, gig, state, body) {
+  await emailUser({ user, gigId: gig.id, state, subject: "ScoreGIG update", body });
+}
+
+// Low-level one-off send with no notifications-log side effects. Used for mail
+// that isn't a per-user gig notification — e.g. the contact form, where the
+// recipient is the support inbox and the submitter goes in reply_to so you can
+// just hit Reply. Returns { ok, detail } instead of recording to the DB.
+export async function sendRawEmail({ to, replyTo, subject, text }) {
+  if (!to) return { ok: false, detail: "no recipient" };
+  if (!EMAIL_READY()) {
+    console.log(`[notify:email pending-setup raw] -> ${to}: ${subject}\n${text}`);
+    return { ok: true, pending: true };
+  }
+  try {
+    const payload = {
+      personalizations: [{ to: [{ email: to }] }],
+      from: { email: process.env.SENDGRID_FROM, name: "ScoreGIG" },
+      subject,
+      content: [{ type: "text/plain", value: text }],
+    };
+    if (replyTo) payload.reply_to = { email: replyTo };
+    const res = await fetch("https://api.sendgrid.com/v3/mail/send", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.SENDGRID_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+    if (res.ok) return { ok: true };
+    const detail = await res.text().catch(() => "");
+    return { ok: false, detail: `${res.status} ${detail}`.slice(0, 200) };
+  } catch (err) {
+    return { ok: false, detail: String(err.message).slice(0, 200) };
+  }
+}
+
+/* -------------------------------- SMS ------------------------------------ */
+async function sendSMS(user, gig, state, body) {
+  if (!user.phone) return;
+  // CASL/carrier compliance: only text users who explicitly opted in and have
+  // not opted back out (via STOP or in-app).
+  if (!user.sms_consent || user.sms_opted_out) return;
+  const smsBody = `${body} Reply STOP to opt out.`;
+  if (!SMS_READY()) {
+    console.log(`[notify:sms pending-setup] -> ${user.phone}: ${smsBody}`);
+    record(user.id, gig.id, "sms", user.phone, state, "pending-setup");
+    return;
+  }
+  try {
+    const sid = process.env.TWILIO_ACCOUNT_SID;
+    const auth = Buffer.from(`${sid}:${process.env.TWILIO_AUTH_TOKEN}`).toString("base64");
+    const form = new URLSearchParams({ To: user.phone, From: process.env.TWILIO_FROM, Body: smsBody });
+    const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
+      method: "POST",
+      headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/x-www-form-urlencoded" },
+      body: form.toString(),
+    });
+    if (res.ok) {
+      record(user.id, gig.id, "sms", user.phone, state, "sent");
+    } else {
+      const txt = await res.text().catch(() => "");
+      record(user.id, gig.id, "sms", user.phone, state, "failed", `${res.status} ${txt}`.slice(0, 200));
+    }
+  } catch (err) {
+    record(user.id, gig.id, "sms", user.phone, state, "failed", String(err.message).slice(0, 200));
+  }
+}
+
+// Human date/time in Pacific (the pilot's zone). Falls back gracefully.
+function fmtLocal(ms) {
+  try {
+    return new Date(ms).toLocaleString("en-CA", {
+      weekday: "short", month: "short", day: "numeric",
+      hour: "numeric", minute: "2-digit", timeZone: "America/Vancouver",
+    });
+  } catch { return "see app"; }
+}
+
+// The full gig detail block used in confirmation emails.
+function gigSummary(gig) {
+  const pay = `$${(gig.pay_cents / 100).toFixed(2)}`;
+  const arriveBy = fmtLocal(gig.start_at - 15 * 60 * 1000); // suggest arriving 15 min early
+  const rows = [
+    `  Game:      ${gig.title}`,
+    `  Sport:     ${gig.sport}`,
+    (gig.home_team || gig.away_team) ? `  Teams:     ${gig.home_team || "Home"} vs ${gig.away_team || "Away"}` : null,
+    `  Starts:    ${fmtLocal(gig.start_at)}`,
+    `  Arrive by: ${arriveBy}`,
+    `  Length:    ${gig.duration_min} min`,
+    gig.venue ? `  Venue:     ${gig.venue}` : null,
+    `  Location:  ${gig.area || gig.location}`,
+    gig.game_code ? `  Game code: ${gig.game_code}` : null,
+    `  Pay:       ${pay} to the scorekeeper`,
+    gig.notes ? `  Notes:     ${gig.notes}` : null,
+  ].filter(Boolean);
+  return rows.join("\n");
+}
+
+async function deliver(user, gig, state) {
+  // SMS stays a short one-liner on every state. Email gets a full detail summary
+  // at the confirmation moment ("Claimed"), role-aware for organizer vs keeper.
+  const smsBody = `Your gig "${gig.title}" is now ${state}.`;
+  let emailBody = smsBody;
+  if (state === "Claimed") {
+    const isOwner = user.id === gig.owner_id;
+    const intro = isOwner
+      ? `Good news — "${gig.title}" is covered. Here are the details:`
+      : `You're confirmed for "${gig.title}". Here are the details:`;
+    const outro = isOwner
+      ? "We'll email you if anything changes."
+      : "Please arrive a few minutes early. Thanks for covering it!";
+    emailBody = `${intro}\n\n${gigSummary(gig)}\n\n${outro}`;
+  }
+  await sendEmail(user, gig, state, emailBody);
+  await sendSMS(user, gig, state, smsBody);
+}
+
+// Confirmation to the organizer the moment they post — a receipt of what went
+// live. One email covers the whole posting (a tournament posts many gigs).
+export async function sendPostConfirmation(ownerId, gigs) {
+  if (!Array.isArray(gigs) || gigs.length === 0) return;
+  const owner = db.prepare("SELECT id, email, notifications_enabled FROM users WHERE id = ?").get(ownerId);
+  if (!owner || !owner.notifications_enabled) return;
+  const n = gigs.length;
+  const header = n === 1
+    ? `Your gig is posted and live on ScoreGIG.`
+    : `Your ${n} gigs are posted and live on ScoreGIG.`;
+  const blocks = gigs.map((g) => gigSummary(g)).join("\n\n");
+  const body = `${header}\n\n${blocks}\n\nYou'll get an email the moment a scorekeeper is confirmed. Your card is only charged when you approve someone.`;
+  await emailUser({
+    user: owner, gigId: gigs[0].id, state: "Posted",
+    subject: n > 1 ? `${n} gigs posted on ScoreGIG` : "Your gig is posted on ScoreGIG",
+    body,
+  });
+}
+
+/**
+ * Notify everyone attached to a gig that its state changed.
+ * Fire-and-forget: never throws into the request/response path.
+ * @param {number} gigId
+ * @param {string} stateLabel  human label, e.g. "Claimed", "Completed"
+ * @param {number[]} extraUserIds  recipients whose link may have just been cleared
+ *                                 (e.g. a declined or cancelling scorekeeper)
+ */
+export function notifyGigState(gigId, stateLabel, extraUserIds = []) {
+  _run(gigId, stateLabel, extraUserIds).catch((e) => console.error("notify error:", e.message));
+}
+
+/**
+ * Notify one recipient that a new gig-chat message arrived. Separate from
+ * notifyGigState because it's addressed to one person (not everyone on the
+ * gig) and carries its own short body instead of a state-change sentence.
+ * @param {number} gigId
+ * @param {number} recipientUserId
+ * @param {string} senderName  the sender's display name
+ */
+export function notifyNewMessage(gigId, recipientUserId, senderName) {
+  _runMessage(gigId, recipientUserId, senderName).catch((e) => console.error("notify (message) error:", e.message));
+}
+
+async function _runMessage(gigId, recipientUserId, senderName) {
+  const gig = db.prepare("SELECT * FROM gigs WHERE id = ?").get(gigId);
+  if (!gig) return;
+  const user = db
+    .prepare("SELECT id, email, phone, notifications_enabled, sms_consent, sms_opted_out FROM users WHERE id = ?")
+    .get(recipientUserId);
+  if (!user || !user.notifications_enabled) return;
+  const body = `New message from ${senderName} re: ${gig.title}`;
+  await sendEmail(user, gig, "New message", body);
+  await sendSMS(user, gig, "New message", body);
+}
+
+async function _run(gigId, stateLabel, extraUserIds) {
+  const gig = db.prepare("SELECT * FROM gigs WHERE id = ?").get(gigId);
+  if (!gig) return;
+  const ids = new Set(
+    [gig.owner_id, gig.claimed_by, gig.requested_by, ...extraUserIds].filter(Boolean)
+  );
+  for (const uid of ids) {
+    const user = db
+      .prepare("SELECT id, email, phone, notifications_enabled, sms_consent, sms_opted_out FROM users WHERE id = ?")
+      .get(uid);
+    if (!user) continue;
+    if (!user.notifications_enabled) continue; // opted out → nothing on any channel
+    await deliver(user, gig, stateLabel);
+  }
+}
