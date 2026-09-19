@@ -106,7 +106,7 @@ gigs.post("/gigs", auth(), (req, res) => {
   if (services.length === 0) services = ["scorekeeper"];
 
   // games is always an array of individual game objects.
-  // Each: {venue, location, area, lat, lng, startAt, durationMin, payCents, homeTeam, awayTeam}
+  // Each: {venue, location, area, lat, lng, startAt, durationMin, payCents, homeTeam, awayTeam, division}
   if (!Array.isArray(games) || games.length === 0) {
     return res.status(400).json({ error: "At least one game is required." });
   }
@@ -148,12 +148,13 @@ gigs.post("/gigs", auth(), (req, res) => {
       if (services.length > 1) gameTitle += ` · ${SERVICE_LABEL[service]}`;
       const info = db.prepare(`
         INSERT INTO gigs (owner_id, title, posted_as, sport, type, service, venue, game_code, location, area, lat, lng,
-                          start_at, duration_min, pay_cents, fee_cents, home_team, away_team, province, tournament_id, notes)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                          start_at, duration_min, pay_cents, fee_cents, home_team, away_team, province, tournament_id, notes, division)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(req.user.id, gameTitle, postedAs, sport, type || "single", service,
              g.venue || null, g.gameCode || null, g.location, g.area || null, g.lat ?? null, g.lng ?? null,
              g.startAt, g.durationMin || 60, payCents, feeCents,
-             g.homeTeam || null, g.awayTeam || null, String(g.province || "").toUpperCase(), tournamentId, notes);
+             g.homeTeam || null, g.awayTeam || null, String(g.province || "").toUpperCase(), tournamentId, notes,
+             (g.division || "").trim() || null);
       logEvent(info.lastInsertRowid, "auth", "Card on file · charged only when you approve someone");
       created.push(gigWithEvents(info.lastInsertRowid));
     }
@@ -191,11 +192,13 @@ gigs.patch("/gigs/:id", auth(), (req, res) => {
     : (gig.notes ?? null);
   db.prepare(`
     UPDATE gigs SET title=?, sport=?, type=?, games=?, venue=?, game_code=?, location=?, area=?, lat=?, lng=?,
-                    start_at=?, duration_min=?, pay_cents=?, fee_cents=?, home_team=?, away_team=?, province=?, notes=?
+                    start_at=?, duration_min=?, pay_cents=?, fee_cents=?, home_team=?, away_team=?, province=?, notes=?, division=?
     WHERE id=?
   `).run(f.title, f.sport, f.type, f.games, f.venue ?? null, f.game_code ?? null, f.location, f.area, f.lat, f.lng,
          f.start_at, f.duration_min, f.pay_cents, feeCents,
-         f.home_team ?? null, f.away_team ?? null, prov || null, notes, gig.id);
+         f.home_team ?? null, f.away_team ?? null, prov || null, notes,
+         (req.body.division !== undefined ? (String(req.body.division || "").trim() || null) : (gig.division ?? null)),
+         gig.id);
 
   if (f.pay_cents !== gig.pay_cents) {
     logEvent(gig.id, "auth", `Gig edited · new pay $${(f.pay_cents / 100).toFixed(2)} CAD`);

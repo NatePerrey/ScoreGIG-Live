@@ -50,7 +50,7 @@ CREATE TABLE IF NOT EXISTS gigs (
   pay_cents INTEGER NOT NULL,              -- what the scorekeeper earns
   fee_cents INTEGER NOT NULL,              -- ScoreGIG service fee
   status TEXT NOT NULL DEFAULT 'open'
-    CHECK (status IN ('open','pending','claimed','arrived','completed','paid','no_show','issue','cancelled')),
+    CHECK (status IN ('open','pending','claimed','arrived','completed','paid','no_show','issue','cancelled','expired')),
   claimed_by INTEGER REFERENCES users(id),
   requested_by INTEGER REFERENCES users(id),  -- scorekeeper awaiting organizer approval
   payment_intent_id TEXT,                  -- capture at claim
@@ -213,6 +213,75 @@ addColumn("ALTER TABLE users ADD COLUMN reset_expires INTEGER"); // token expiry
 // already been sent for a claimed gig, so a restart or a slow tick never
 // double-sends. Bits: 1=5-day, 2=48-hour, 4=24-hour, 8=morning-of.
 addColumn("ALTER TABLE gigs ADD COLUMN reminder_flags INTEGER NOT NULL DEFAULT 0");
+
+// Division/age group for the game (e.g. "U13 AAA", "2014 AAA") — lets a
+// tournament organizer post every game for one day + division quickly.
+addColumn("ALTER TABLE gigs ADD COLUMN division TEXT");
+
+// --- One-time schema fix: widen the status CHECK constraint ---------------
+// The 'expired' status (auto-expire job, Sep19) was added to the app's
+// vocabulary after this table's CHECK constraint was already locked in on
+// first create, and SQLite can't ALTER a CHECK constraint in place. Until
+// this runs, every attempt to set status='expired' silently fails the
+// UPDATE (constraint violation), so unclaimed gigs never actually expire.
+// Detect the stale constraint from sqlite_master and rebuild the table with
+// the same data if found; a no-op after it's applied once.
+(function fixExpiredStatusConstraint() {
+  const row = db.prepare(
+    "SELECT sql FROM sqlite_master WHERE type='table' AND name='gigs'"
+  ).get();
+  if (!row || row.sql.includes("'expired'")) return; // already fixed (or no table yet)
+
+  const cols = db.prepare("PRAGMA table_info(gigs)").all().map((c) => c.name);
+  const colList = cols.join(", ");
+
+  db.transaction(() => {
+    db.exec(`
+      CREATE TABLE gigs_new (
+        id INTEGER PRIMARY KEY,
+        owner_id INTEGER NOT NULL REFERENCES users(id),
+        title TEXT NOT NULL,
+        posted_as TEXT,
+        home_team TEXT,
+        away_team TEXT,
+        tournament_id TEXT,
+        sport TEXT NOT NULL,
+        type TEXT NOT NULL CHECK (type IN ('single','multi','tournament')),
+        games INTEGER NOT NULL DEFAULT 1,
+        location TEXT NOT NULL,
+        area TEXT,
+        lat REAL, lng REAL,
+        start_at INTEGER NOT NULL,
+        duration_min INTEGER NOT NULL,
+        pay_cents INTEGER NOT NULL,
+        fee_cents INTEGER NOT NULL,
+        status TEXT NOT NULL DEFAULT 'open'
+          CHECK (status IN ('open','pending','claimed','arrived','completed','paid','no_show','issue','cancelled','expired')),
+        claimed_by INTEGER REFERENCES users(id),
+        requested_by INTEGER REFERENCES users(id),
+        payment_intent_id TEXT,
+        transfer_id TEXT,
+        release_at INTEGER,
+        badge TEXT CHECK (badge IN ('mvp','team','five') OR badge IS NULL),
+        venue TEXT,
+        game_code TEXT,
+        payout_started INTEGER DEFAULT 0,
+        service TEXT DEFAULT 'scorekeeper',
+        cancelled_by INTEGER,
+        cancel_reason TEXT,
+        province TEXT,
+        hidden_by_owner INTEGER DEFAULT 0,
+        notes TEXT,
+        reminder_flags INTEGER NOT NULL DEFAULT 0,
+        division TEXT
+      );
+    `);
+    db.exec(`INSERT INTO gigs_new (${colList}) SELECT ${colList} FROM gigs;`);
+    db.exec(`DROP TABLE gigs;`);
+    db.exec(`ALTER TABLE gigs_new RENAME TO gigs;`);
+  })();
+  console.log("Migrated gigs table: status CHECK constraint now allows 'expired'.");
+})();
 
 export function logEvent(gigId, kind, label) {
   db.prepare(

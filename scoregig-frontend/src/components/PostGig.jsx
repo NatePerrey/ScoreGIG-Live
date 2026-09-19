@@ -23,7 +23,7 @@ const PROVINCES = [
 
 const blankGame = () => ({
   venue: "", rink: "", gameCode: "", location: "", place: null, date: "", time: "",
-  durationMin: 60, pay: 30, homeTeam: "", awayTeam: "",
+  durationMin: 60, pay: 30, homeTeam: "", awayTeam: "", division: "",
 });
 
 // Combine a venue/facility name with an optional rink/court number into one
@@ -61,6 +61,11 @@ function GameForm({ game, idx, onChange, onRemove, canRemove, lbl, input, toast,
           <input className={input} style={{ borderColor: C.mapleLine }} value={game.awayTeam}
             onChange={(e) => set("awayTeam", e.target.value)} placeholder="e.g. Abbotsford Hawks" />
         </div>
+      </div>
+      <div>
+        <label className={lbl} style={{ color: C.ink60 }}>Division <span style={{ color: C.ink40 }}>(optional)</span></label>
+        <input className={input} style={{ borderColor: C.mapleLine }} value={game.division}
+          onChange={(e) => set("division", e.target.value)} placeholder="e.g. U13 AAA Division" />
       </div>
       <div className="grid grid-cols-2 gap-2">
         <div>
@@ -168,6 +173,11 @@ function GameRow({ game, idx, onChange, onRemove, canRemove, lbl, input, showGam
         </p>
       )}
       <div>
+        <label className={lbl} style={{ color: C.ink60 }}>Division <span style={{ color: C.ink40 }}>(optional)</span></label>
+        <input className={input} style={{ borderColor: C.mapleLine }} value={game.division}
+          onChange={(e) => set("division", e.target.value)} placeholder="e.g. 2014 AAA" />
+      </div>
+      <div>
         <label className={lbl} style={{ color: C.ink60 }}>Rink / court <span style={{ color: C.ink40 }}>(optional)</span></label>
         <input className={input} style={{ borderColor: C.mapleLine }} value={game.rink}
           onChange={(e) => set("rink", e.target.value)} placeholder="e.g. Rink 2" />
@@ -214,12 +224,13 @@ export default function PostGig({ initial, onSubmit, onCancel, toast }) {
       const d = new Date(initial.start_at);
       const pad = (n) => String(n).padStart(2, "0");
       return [{
-        venue: initial.venue || "", gameCode: initial.game_code || "",
+        venue: initial.venue || "", rink: "", gameCode: initial.game_code || "",
         location: initial.location, place: initial.area ? { name: initial.area, lat: initial.lat, lng: initial.lng } : null,
         date: `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`,
         time: `${pad(d.getHours())}:${pad(d.getMinutes())}`,
         durationMin: initial.duration_min, pay: initial.pay_cents / 100,
         homeTeam: initial.home_team || "", awayTeam: initial.away_team || "",
+        division: initial.division || "",
 
       }];
     }
@@ -240,6 +251,7 @@ export default function PostGig({ initial, onSubmit, onCancel, toast }) {
   const [tourVenue, setTourVenue] = useState("");
   const [tourPlace, setTourPlace] = useState(null);
   const [tourDate, setTourDate] = useState("");
+  const [tourDivision, setTourDivision] = useState("");
   const [tourDuration, setTourDuration] = useState(60);
   const [tourPay, setTourPay] = useState(30);
   // Whether this tournament uses per-game digital scoresheet codes at all (piece 3).
@@ -255,7 +267,8 @@ export default function PostGig({ initial, onSubmit, onCancel, toast }) {
 
   // When type changes, adjust the games array to match the expected count.
   // In header mode (multi/tournament), new rows inherit the shared tourDate
-  // so they stay in sync with "Applies to every game below" immediately.
+  // and tourDivision so they stay in sync with "Applies to every game below"
+  // immediately — one day + division posts fast without retyping either.
   const changeType = (t) => {
     setType(t);
     const count = { single: 1, multi: 3, tournament: 4 }[t] || 1;
@@ -263,7 +276,9 @@ export default function PostGig({ initial, onSubmit, onCancel, toast }) {
     setGames((prev) => {
       if (count > prev.length) {
         const extra = Array(count - prev.length).fill(null).map(() =>
-          headerModeNow && tourDate ? { ...blankGame(), date: tourDate } : blankGame());
+          headerModeNow
+            ? { ...blankGame(), date: tourDate || "", division: tourDivision || "" }
+            : blankGame());
         return [...prev, ...extra];
       }
       return prev.slice(0, count);
@@ -278,13 +293,23 @@ export default function PostGig({ initial, onSubmit, onCancel, toast }) {
     setGames((prev) => prev.map((g) => ({ ...g, date: val })));
   };
 
+  // Bulk-fills the shared division onto every game row (one tap for "all AAA
+  // games today"), but unlike date it stays editable per row afterward, since
+  // a tournament day can mix divisions.
+  const changeTourDivision = (val) => {
+    setTourDivision(val);
+    setGames((prev) => prev.map((g) => ({ ...g, division: val })));
+  };
+
   const updateGame = (idx, key, val) => {
     setGames((prev) => prev.map((g, i) => i === idx ? { ...g, [key]: val } : g));
   };
   const removeGame = (idx) => setGames((prev) => prev.filter((_, i) => i !== idx));
   const addGame = () => setGames((prev) => [
     ...prev,
-    isHeaderMode && tourDate ? { ...blankGame(), date: tourDate } : blankGame(),
+    isHeaderMode
+      ? { ...blankGame(), date: tourDate || "", division: tourDivision || "" }
+      : blankGame(),
   ]);
 
   const lbl = "mb-1 block text-[10px] font-bold uppercase tracking-wide";
@@ -346,6 +371,7 @@ export default function PostGig({ initial, onSubmit, onCancel, toast }) {
           payCents: Math.round(tourPay * 100),
           province,
           homeTeam: g.homeTeam || null, awayTeam: g.awayTeam || null,
+          division: (g.division || "").trim() || null,
         };
       }
       const row = {
@@ -356,6 +382,7 @@ export default function PostGig({ initial, onSubmit, onCancel, toast }) {
         payCents: Math.round(g.pay * 100),
         province,
         homeTeam: g.homeTeam || null, awayTeam: g.awayTeam || null,
+        division: (g.division || "").trim() || null,
       };
       // Single gig, both roles: game Pay = scorekeeper (clock) pay; paySheet = scoresheet pay.
       if (mode === "single" && bothRoles) {
@@ -381,7 +408,7 @@ export default function PostGig({ initial, onSubmit, onCancel, toast }) {
           <div className="text-base font-bold" style={{ color: C.navy }}>Post a Single Gig</div>
           <div className="mt-0.5 text-xs" style={{ color: C.ink60 }}>One game. Pick the role you need filled — or both.</div>
         </button>
-        <button onClick={() => { setMode("tournament"); changeType("single"); }}
+        <button onClick={() => { setMode("tournament"); changeType("tournament"); }}
           className="w-full rounded-xl border-2 p-4 text-left" style={{ borderColor: C.amber, backgroundColor: "#fff" }}>
           <div className="text-base font-bold" style={{ color: C.navy }}>Post Tournament Gigs</div>
           <div className="mt-0.5 text-xs" style={{ color: C.ink60 }}>Multiple games at once — each posts as its own claimable gig.</div>
@@ -404,9 +431,10 @@ export default function PostGig({ initial, onSubmit, onCancel, toast }) {
 
       <div className="rounded-xl border bg-white p-4 space-y-3" style={{ borderColor: C.mapleLine }}>
         <div>
-          <label className={lbl} style={{ color: C.ink60 }}>Gig title</label>
+          <label className={lbl} style={{ color: C.ink60 }}>{mode === "tournament" ? "Tournament name" : "Gig title"}</label>
           <input className={input} style={{ borderColor: C.mapleLine }} value={title}
-            onChange={(e) => setTitle(e.target.value)} placeholder="U13 AAA Minor Hockey Game" />
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder={mode === "tournament" ? "2026 Allstar Tournament" : "U13 AAA Minor Hockey Game"} />
         </div>
 
         <div>
@@ -540,6 +568,14 @@ export default function PostGig({ initial, onSubmit, onCancel, toast }) {
               value={tourDate} onChange={(e) => changeTourDate(e.target.value)} />
             <p className="mt-1 text-[10px]" style={{ color: C.ink40 }}>
               Post one day of games at a time — every game below shares this date. Need a different day? Post it separately.
+            </p>
+          </div>
+          <div>
+            <label className={lbl} style={{ color: C.ink60 }}>Division <span style={{ color: C.ink40 }}>(optional)</span></label>
+            <input className={input} style={{ borderColor: C.mapleLine }} value={tourDivision}
+              onChange={(e) => changeTourDivision(e.target.value)} placeholder="e.g. U13 AAA Division" />
+            <p className="mt-1 text-[10px]" style={{ color: C.ink40 }}>
+              Fills every game below with this division — handy when posting a whole day for one division. Edit any single game after if one differs.
             </p>
           </div>
           <div>

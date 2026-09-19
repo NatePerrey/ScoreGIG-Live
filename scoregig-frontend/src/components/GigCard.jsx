@@ -85,6 +85,11 @@ export default function GigCard({ gig, me, viewer, onAction, onBadge, onEdit, on
               Posted by {gig.posted_as}{gig.owner_display ? ` · ${gig.owner_display}` : ""}
             </div>
           )}
+          {gig.division && (
+            <div className="mt-0.5 text-[11px] font-semibold" style={{ color: C.ink60 }}>
+              {gig.division}
+            </div>
+          )}
           {(gig.home_team || gig.away_team) && (
             <div className="mt-0.5 text-[11px] font-bold" style={{ color: C.navy }}>
               {gig.home_team || "Home"} <span style={{ color: C.ink40 }}>vs</span> {gig.away_team || "Away"}
