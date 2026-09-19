@@ -22,9 +22,18 @@ const PROVINCES = [
 ];
 
 const blankGame = () => ({
-  venue: "", gameCode: "", location: "", place: null, date: "", time: "",
+  venue: "", rink: "", gameCode: "", location: "", place: null, date: "", time: "",
   durationMin: 60, pay: 30, homeTeam: "", awayTeam: "",
 });
+
+// Combine a venue/facility name with an optional rink/court number into one
+// display string, e.g. "Chilliwack Coliseum" + "Rink 2" -> "Chilliwack Coliseum — Rink 2".
+const combineVenue = (venue, rink) => {
+  const v = (venue || "").trim();
+  const r = (rink || "").trim();
+  if (v && r) return `${v} — ${r}`;
+  return v || r || null;
+};
 
 // Full per-game form — single-gig mode and editing only (always exactly one game).
 function GameForm({ game, idx, onChange, onRemove, canRemove, lbl, input, toast, minCents }) {
@@ -53,13 +62,23 @@ function GameForm({ game, idx, onChange, onRemove, canRemove, lbl, input, toast,
             onChange={(e) => set("awayTeam", e.target.value)} placeholder="e.g. Abbotsford Hawks" />
         </div>
       </div>
-      <div>
-        <label className={lbl} style={{ color: C.ink60 }}>Venue / facility</label>
-        <input className={input} style={{ borderColor: game.venue ? C.green : C.mapleLine }} value={game.venue}
-          onChange={(e) => set("venue", e.target.value)} placeholder="e.g. Chilliwack Coliseum — Rink 2" />
-        <p className="mt-1 text-[10px]" style={{ color: C.ink40 }}>
-          The exact rink, court, gym, or complex. This shows on the gig{game.venue ? " ✓" : ""}.
-        </p>
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className={lbl} style={{ color: C.ink60 }}>Venue / facility</label>
+          <input className={input} style={{ borderColor: game.venue ? C.green : C.mapleLine }} value={game.venue}
+            onChange={(e) => set("venue", e.target.value)} placeholder="e.g. Chilliwack Coliseum" />
+          <p className="mt-1 text-[10px]" style={{ color: C.ink40 }}>
+            The complex. This shows on the gig{game.venue ? " ✓" : ""}.
+          </p>
+        </div>
+        <div>
+          <label className={lbl} style={{ color: C.ink60 }}>Rink / court <span style={{ color: C.ink40 }}>(optional)</span></label>
+          <input className={input} style={{ borderColor: C.mapleLine }} value={game.rink}
+            onChange={(e) => set("rink", e.target.value)} placeholder="e.g. Rink 2" />
+          <p className="mt-1 text-[10px]" style={{ color: C.ink40 }}>
+            For arenas with more than one sheet/court.
+          </p>
+        </div>
       </div>
       <div>
         <label className={lbl} style={{ color: C.ink60 }}>Game code <span style={{ color: C.ink40 }}>(optional)</span></label>
@@ -148,11 +167,17 @@ function GameRow({ game, idx, onChange, onRemove, canRemove, lbl, input, showGam
           Don't know the teams yet? You can add them anytime before game day.
         </p>
       )}
+      <div>
+        <label className={lbl} style={{ color: C.ink60 }}>Rink / court <span style={{ color: C.ink40 }}>(optional)</span></label>
+        <input className={input} style={{ borderColor: C.mapleLine }} value={game.rink}
+          onChange={(e) => set("rink", e.target.value)} placeholder="e.g. Rink 2" />
+      </div>
       <div className="grid grid-cols-2 gap-2">
         <div>
           <label className={lbl} style={{ color: C.ink60 }}>Date</label>
-          <input type="date" className={input} style={{ borderColor: C.mapleLine }} value={game.date}
-            onChange={(e) => set("date", e.target.value)} />
+          <input type="date" disabled className={input} value={game.date}
+            style={{ borderColor: C.mapleLine, backgroundColor: C.maple, color: C.ink60, cursor: "not-allowed" }} />
+          <p className="mt-1 text-[10px]" style={{ color: C.ink40 }}>Set once above, applies to every game.</p>
         </div>
         <div>
           <label className={lbl} style={{ color: C.ink60 }}>Start time</label>
@@ -214,6 +239,7 @@ export default function PostGig({ initial, onSubmit, onCancel, toast }) {
   // editing always edits one existing game via the full GameForm above.
   const [tourVenue, setTourVenue] = useState("");
   const [tourPlace, setTourPlace] = useState(null);
+  const [tourDate, setTourDate] = useState("");
   const [tourDuration, setTourDuration] = useState(60);
   const [tourPay, setTourPay] = useState(30);
   // Whether this tournament uses per-game digital scoresheet codes at all (piece 3).
@@ -227,21 +253,39 @@ export default function PostGig({ initial, onSubmit, onCancel, toast }) {
 
   const gameCount = { single: 1, multi: 3, tournament: 4 }[type] || 1;
 
-  // When type changes, adjust the games array to match the expected count
+  // When type changes, adjust the games array to match the expected count.
+  // In header mode (multi/tournament), new rows inherit the shared tourDate
+  // so they stay in sync with "Applies to every game below" immediately.
   const changeType = (t) => {
     setType(t);
     const count = { single: 1, multi: 3, tournament: 4 }[t] || 1;
+    const headerModeNow = t !== "single" && !editing;
     setGames((prev) => {
-      if (count > prev.length) return [...prev, ...Array(count - prev.length).fill(null).map(blankGame)];
+      if (count > prev.length) {
+        const extra = Array(count - prev.length).fill(null).map(() =>
+          headerModeNow && tourDate ? { ...blankGame(), date: tourDate } : blankGame());
+        return [...prev, ...extra];
+      }
       return prev.slice(0, count);
     });
+  };
+
+  // Syncs the shared tournament date down onto every game row — GameRow's
+  // date input is locked/disabled, so this header field is the only place
+  // it can be changed once games exist.
+  const changeTourDate = (val) => {
+    setTourDate(val);
+    setGames((prev) => prev.map((g) => ({ ...g, date: val })));
   };
 
   const updateGame = (idx, key, val) => {
     setGames((prev) => prev.map((g, i) => i === idx ? { ...g, [key]: val } : g));
   };
   const removeGame = (idx) => setGames((prev) => prev.filter((_, i) => i !== idx));
-  const addGame = () => setGames((prev) => [...prev, blankGame()]);
+  const addGame = () => setGames((prev) => [
+    ...prev,
+    isHeaderMode && tourDate ? { ...blankGame(), date: tourDate } : blankGame(),
+  ]);
 
   const lbl = "mb-1 block text-[10px] font-bold uppercase tracking-wide";
   const input = "w-full rounded-lg border px-3 py-2.5 text-sm bg-white";
@@ -295,7 +339,7 @@ export default function PostGig({ initial, onSubmit, onCancel, toast }) {
     const gamesPayload = games.map((g) => {
       if (isHeaderMode) {
         return {
-          venue: tourVenue.trim() || null, gameCode: (tourUsesGameCode && g.gameCode) || null,
+          venue: combineVenue(tourVenue.trim(), g.rink) || null, gameCode: (tourUsesGameCode && g.gameCode) || null,
           location: tourPlace.name, area: tourPlace.name, lat: tourPlace.lat, lng: tourPlace.lng,
           startAt: new Date(`${g.date}T${g.time}`).getTime(),
           durationMin: Number(tourDuration) || 60,
@@ -305,7 +349,7 @@ export default function PostGig({ initial, onSubmit, onCancel, toast }) {
         };
       }
       const row = {
-        venue: g.venue || null, gameCode: g.gameCode || null,
+        venue: combineVenue(g.venue, g.rink) || null, gameCode: g.gameCode || null,
         location: g.location, area: g.place.name, lat: g.place.lat, lng: g.place.lng,
         startAt: new Date(`${g.date}T${g.time}`).getTime(),
         durationMin: Number(g.durationMin) || 60,
@@ -489,6 +533,14 @@ export default function PostGig({ initial, onSubmit, onCancel, toast }) {
         <div className="rounded-xl border bg-white p-4 space-y-3" style={{ borderColor: C.amber }}>
           <div className="text-xs font-bold uppercase tracking-wide" style={{ color: C.amber }}>
             Applies to every game below
+          </div>
+          <div>
+            <label className={lbl} style={{ color: C.ink60 }}>Date</label>
+            <input type="date" className={input} style={{ borderColor: tourDate ? C.green : C.mapleLine }}
+              value={tourDate} onChange={(e) => changeTourDate(e.target.value)} />
+            <p className="mt-1 text-[10px]" style={{ color: C.ink40 }}>
+              Post one day of games at a time — every game below shares this date. Need a different day? Post it separately.
+            </p>
           </div>
           <div>
             <label className={lbl} style={{ color: C.ink60 }}>Venue / facility</label>
