@@ -179,7 +179,7 @@ function GameRow({ game, idx, onChange, onRemove, canRemove, lbl, input, showGam
 export default function PostGig({ initial, onSubmit, onCancel, toast }) {
   const editing = !!initial;
   const [title, setTitle] = useState(initial?.title?.replace(/ \u2014 Game \d+$/, "") || "");
-  const [sport, setSport] = useState(initial?.sport || "Basketball");
+  const [sport, setSport] = useState(initial?.sport || "Hockey");
   const [otherSport, setOtherSport] = useState("");
   const [province, setProvince] = useState(initial?.province || "");
   const [type, setType] = useState(initial?.type || "single");
@@ -337,7 +337,7 @@ export default function PostGig({ initial, onSubmit, onCancel, toast }) {
           <div className="text-base font-bold" style={{ color: C.navy }}>Post a Single Gig</div>
           <div className="mt-0.5 text-xs" style={{ color: C.ink60 }}>One game. Pick the role you need filled — or both.</div>
         </button>
-        <button onClick={() => { setMode("tournament"); changeType("tournament"); }}
+        <button onClick={() => { setMode("tournament"); changeType("single"); }}
           className="w-full rounded-xl border-2 p-4 text-left" style={{ borderColor: C.amber, backgroundColor: "#fff" }}>
           <div className="text-base font-bold" style={{ color: C.navy }}>Post Tournament Gigs</div>
           <div className="mt-0.5 text-xs" style={{ color: C.ink60 }}>Multiple games at once — each posts as its own claimable gig.</div>
@@ -362,7 +362,7 @@ export default function PostGig({ initial, onSubmit, onCancel, toast }) {
         <div>
           <label className={lbl} style={{ color: C.ink60 }}>Gig title</label>
           <input className={input} style={{ borderColor: C.mapleLine }} value={title}
-            onChange={(e) => setTitle(e.target.value)} placeholder="U12 Rep Basketball — Saturday league" />
+            onChange={(e) => setTitle(e.target.value)} placeholder="U13 AAA Minor Hockey Game" />
         </div>
 
         <div>
