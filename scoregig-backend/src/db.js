@@ -235,6 +235,15 @@ addColumn("ALTER TABLE gigs ADD COLUMN division TEXT");
   const cols = db.prepare("PRAGMA table_info(gigs)").all().map((c) => c.name);
   const colList = cols.join(", ");
 
+  // gig_events (and other tables) hold a plain REFERENCES gigs(id) — with
+  // foreign key enforcement on (Render's build defaults it on; local dev
+  // often doesn't, which is why this passed here but failed there), DROP
+  // TABLE gigs would implicitly delete those rows first and get rejected
+  // as a constraint violation. PRAGMA foreign_keys can only be toggled
+  // outside a transaction, so flip it off, run the swap, then restore it.
+  const fkWasOn = db.pragma("foreign_keys", { simple: true }) === 1;
+  if (fkWasOn) db.pragma("foreign_keys = OFF");
+
   db.transaction(() => {
     db.exec(`
       CREATE TABLE gigs_new (
@@ -280,6 +289,7 @@ addColumn("ALTER TABLE gigs ADD COLUMN division TEXT");
     db.exec(`DROP TABLE gigs;`);
     db.exec(`ALTER TABLE gigs_new RENAME TO gigs;`);
   })();
+  if (fkWasOn) db.pragma("foreign_keys = ON");
   console.log("Migrated gigs table: status CHECK constraint now allows 'expired'.");
 })();
 
