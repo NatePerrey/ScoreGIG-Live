@@ -239,6 +239,10 @@ export default function PostGig({ initial, onSubmit, onCancel, toast }) {
   const [singleRole, setSingleRole] = useState(editing && initial?.type === "single" ? (initial.service || "scorekeeper") : null);
   const [bothRoles, setBothRoles] = useState(false);
   const [paySheet, setPaySheet] = useState(30); // scoresheet pay ($) when both roles picked
+  // Tournament/multi mode, when both roles are selected: post them as one
+  // combined gig (one person does both jobs, one price) instead of two
+  // separate gigs. Replaces the old "needs documented experience" gate.
+  const [combineRoles, setCombineRoles] = useState(false);
 
   // Tournament header (piece 2): venue, city, duration, and pay set ONCE and
   // applied to every game row below. Only used for new multi-game postings —
@@ -328,10 +332,11 @@ export default function PostGig({ initial, onSubmit, onCancel, toast }) {
   };
 
   // Effective roles: single mode derives from the toggle/checkbox; tournament
-  // mode uses the existing multi-select.
+  // mode uses the multi-select, collapsed to a single "both" combined role
+  // when the organizer checked "post both roles as one combined gig."
   const effServices = mode === "single"
     ? (bothRoles ? ["scorekeeper", "scoresheet"] : (singleRole ? [singleRole] : []))
-    : services;
+    : (services.length > 1 && combineRoles ? ["both"] : services);
 
   const roleValid = mode === "single" ? (bothRoles || !!singleRole) : services.length > 0;
   const sheetMin = minCentsFor(games[0]?.durationMin || 60);
@@ -533,9 +538,21 @@ export default function PostGig({ initial, onSubmit, onCancel, toast }) {
               ))}
             </div>
             {services.length > 1 && (
-              <p className="mt-1 text-[10px]" style={{ color: C.ink40 }}>
-                Each role becomes its own gig, and one person can't cover two roles in the same event (unless they've added documented experience).
-              </p>
+              <div className="mt-2">
+                <label className="flex items-center gap-2 text-xs font-semibold" style={{ color: C.navy }}>
+                  <input type="checkbox" checked={combineRoles} onChange={(e) => setCombineRoles(e.target.checked)} />
+                  Post both roles as one combined gig
+                </label>
+                {combineRoles ? (
+                  <p className="mt-1 text-[10px]" style={{ color: C.ink40 }}>
+                    One gig per game — one person runs the clock and keeps the scoresheet, for one combined price. Set that price below.
+                  </p>
+                ) : (
+                  <p className="mt-1 text-[10px]" style={{ color: C.ink40 }}>
+                    This will post as two separate gigs per game — one for Scorekeeper, one for Scoresheet.
+                  </p>
+                )}
+              </div>
             )}
           </div>
         )}
@@ -596,7 +613,7 @@ export default function PostGig({ initial, onSubmit, onCancel, toast }) {
               </select>
             </div>
             <div>
-              <label className={lbl} style={{ color: C.ink60 }}>Pay per game (CAD)</label>
+              <label className={lbl} style={{ color: C.ink60 }}>{services.length > 1 && combineRoles ? "Combined role pay (CAD)" : "Pay per game (CAD)"}</label>
               <input type="number" min={Math.ceil(headerMinCents / 100)} step={1} className={input}
                 style={{ borderColor: headerPayValid ? C.mapleLine : C.red }}
                 value={tourPay} onChange={(e) => setTourPay(Number(e.target.value))} />
@@ -640,7 +657,7 @@ export default function PostGig({ initial, onSubmit, onCancel, toast }) {
 
       <div className="rounded-lg p-3 text-xs" style={{ backgroundColor: C.maple, color: C.navy }}>
         {totalGigs > 1
-          ? `This will create ${totalGigs} separate gigs${!editing && services.length > 1 ? ` (${games.length} game${games.length > 1 ? "s" : ""} × ${services.length} roles)` : ""} — each can be claimed individually.`
+          ? `This will create ${totalGigs} separate gigs${!editing && effServices.length > 1 ? ` (${games.length} game${games.length > 1 ? "s" : ""} × ${effServices.length} roles)` : ""} — each can be claimed individually.`
           : "Your card is on file. It's only charged when you approve someone."}
       </div>
 

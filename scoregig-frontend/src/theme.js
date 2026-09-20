@@ -33,7 +33,9 @@ export const SERVICES = {
   scorekeeper: { key: "scorekeeper", label: "Scorekeeper", desc: "Runs the clock / scoreboard" },
   scoresheet:  { key: "scoresheet",  label: "Scoresheet",  desc: "Keeps the official scoresheet" },
 };
-export const serviceLabel = (k) => SERVICES[k]?.label || "Scorekeeper";
+// "both" isn't a pickable role in the poster (it's the combined-gig checkbox's
+// result, not a third button) so it lives outside SERVICES, just here for display.
+export const serviceLabel = (k) => (k === "both" ? "Scorekeeper + Scoresheet" : SERVICES[k]?.label || "Scorekeeper");
 
 const START_TERMS = {
   Basketball: "tip-off", Hockey: "puck drop", Baseball: "first pitch",

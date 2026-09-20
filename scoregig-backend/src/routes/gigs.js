@@ -75,8 +75,12 @@ gigs.get("/gigs/:id", auth(), (req, res) => {
 
 /* ------------------------------- CREATE ---------------------------------- */
 // Requires a saved card (see /organizers/setup-intent). No charge happens yet.
-const SERVICES = ["scorekeeper", "scoresheet"];
-const SERVICE_LABEL = { scorekeeper: "Scorekeeper", scoresheet: "Scoresheet" };
+// "both" (Sep20): a combined-role gig — one person does the scorekeeper AND
+// scoresheet job for one price, posted as a single gig instead of two. It's
+// not a role someone hires for separately; it's what "services" collapses to
+// when the organizer checks "post both roles as one combined gig."
+const SERVICES = ["scorekeeper", "scoresheet", "both"];
+const SERVICE_LABEL = { scorekeeper: "Scorekeeper", scoresheet: "Scoresheet", both: "Scorekeeper + Scoresheet" };
 
 gigs.post("/gigs", auth(), (req, res) => {
   if (guardianBlocked(req.user)) {
@@ -145,7 +149,7 @@ gigs.post("/gigs", auth(), (req, res) => {
       const feeCents = Math.round((payCents * FEE_PERCENT) / 100);
       let gameTitle = title;
       if (games.length > 1) gameTitle += ` — Game ${i + 1}`;
-      if (services.length > 1) gameTitle += ` · ${SERVICE_LABEL[service]}`;
+      if (services.length > 1 || service === "both") gameTitle += ` · ${SERVICE_LABEL[service]}`;
       const info = db.prepare(`
         INSERT INTO gigs (owner_id, title, posted_as, sport, type, service, venue, game_code, location, area, lat, lng,
                           start_at, duration_min, pay_cents, fee_cents, home_team, away_team, province, tournament_id, notes, division)
