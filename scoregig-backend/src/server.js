@@ -16,6 +16,7 @@ import { authRoutes } from "./routes/authRoutes.js";
 import { admin } from "./routes/admin.js";
 import { messages } from "./routes/messages.js";
 import { contact } from "./routes/contact.js";
+import { track } from "./routes/track.js";
 import { startReleaseJob, releaseDuePayments } from "./jobs/release.js";
 import { startMessageCleanupJob } from "./jobs/cleanupMessages.js";
 import { startReminderJob, runReminderDigest } from "./jobs/reminders.js";
@@ -288,6 +289,7 @@ app.use("/api", gigs);
 app.use("/api", admin);
 app.use("/api", messages);
 app.use("/api", contact);
+app.use("/api", track);
 
 // Internal payout trigger for external schedulers (cron / cloud scheduler).
 // Protect with a shared secret in the x-internal-secret header. Only useful when

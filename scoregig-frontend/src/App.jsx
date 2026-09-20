@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { ClipboardList, PlusCircle, Megaphone, User, CheckCircle2, Shield, X, ChevronRight, CreditCard, LayoutDashboard } from "lucide-react";
 import { C, BADGES, AREAS } from "./theme.js";
-import { api, setToken, getToken } from "./api.js";
+import { api, setToken, getToken, trackView } from "./api.js";
 import { Toast } from "./components/ui.jsx";
 import GigCard from "./components/GigCard.jsx";
 import LocationBar from "./components/LocationBar.jsx";
@@ -124,6 +124,15 @@ export default function App() {
   const refreshMe = useCallback(() => {
     api("/me").then(setMe).catch(() => { setToken(null); setAuthed(false); });
   }, []);
+
+  // Free, self-hosted traffic tracker (admin dashboard, Sep19): fires a
+  // lightweight screen-view ping whenever the person lands somewhere new —
+  // the login screen, or a mode/tab combo once signed in. This is an SPA
+  // with no URL routing, so "path" here is a synthetic screen name, not an
+  // actual URL.
+  useEffect(() => {
+    trackView(authed ? `/${mode}/${tab}` : "/login");
+  }, [authed, mode, tab]);
 
   // Central sign-out — used by the header button, the idle timer, and any 401.
   const logout = useCallback((reason) => {

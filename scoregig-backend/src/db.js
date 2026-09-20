@@ -158,6 +158,19 @@ CREATE TABLE IF NOT EXISTS message_flags (
   created_at INTEGER NOT NULL,
   reviewed INTEGER NOT NULL DEFAULT 0
 );
+
+-- Free, self-hosted traffic tracker (admin dashboard, Sep19). One row per
+-- screen view. visitor_id is a random id the frontend keeps in
+-- localStorage — no cookies, no IP/PII stored — just enough to tell "one
+-- person looked at 5 screens" from "5 people looked at 1 screen each".
+CREATE TABLE IF NOT EXISTS page_views (
+  id INTEGER PRIMARY KEY,
+  path TEXT NOT NULL,
+  t INTEGER NOT NULL,
+  visitor_id TEXT,
+  referrer TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_page_views_t ON page_views (t);
 `);
 
 // --- Lightweight additive migrations -------------------------------------

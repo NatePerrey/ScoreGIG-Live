@@ -72,6 +72,45 @@ admin.get("/admin/stats", auth(), requireAdmin, (req, res) => {
   });
 });
 
+// Traffic tracker (Sep19, free/self-hosted): view counts from the page_views
+// table the /api/track endpoint writes to. Returns today/7-day/30-day/all-time
+// totals, unique visitors (by the frontend's localStorage visitor id) over the
+// last 30 days, a daily series for the last 14 days (oldest first, so a chart
+// or bar list can render left-to-right), and the top screens over 30 days.
+admin.get("/admin/traffic", auth(), requireAdmin, (req, res) => {
+  const now = Date.now();
+  const DAY = 24 * 60 * 60 * 1000;
+  const startOfToday = new Date(now); startOfToday.setHours(0, 0, 0, 0);
+
+  const countSince = (ms) =>
+    db.prepare("SELECT COUNT(*) AS n FROM page_views WHERE t >= ?").get(ms).n;
+
+  const totalViews = db.prepare("SELECT COUNT(*) AS n FROM page_views").get().n;
+  const viewsToday = countSince(startOfToday.getTime());
+  const viewsLast7Days = countSince(now - 7 * DAY);
+  const viewsLast30Days = countSince(now - 30 * DAY);
+  const uniqueVisitors30d = db.prepare(
+    "SELECT COUNT(DISTINCT visitor_id) AS n FROM page_views WHERE t >= ? AND visitor_id IS NOT NULL"
+  ).get(now - 30 * DAY).n;
+
+  // Daily series, last 14 days including today, oldest first.
+  const dailySeries = [];
+  for (let i = 13; i >= 0; i--) {
+    const dayStart = startOfToday.getTime() - i * DAY;
+    const dayEnd = dayStart + DAY;
+    const n = db.prepare("SELECT COUNT(*) AS n FROM page_views WHERE t >= ? AND t < ?").get(dayStart, dayEnd).n;
+    dailySeries.push({ date: new Date(dayStart).toISOString().slice(0, 10), count: n });
+  }
+
+  const topPaths = db.prepare(`
+    SELECT path, COUNT(*) AS n FROM page_views
+    WHERE t >= ?
+    GROUP BY path ORDER BY n DESC LIMIT 8
+  `).all(now - 30 * DAY);
+
+  res.json({ totalViews, viewsToday, viewsLast7Days, viewsLast30Days, uniqueVisitors30d, dailySeries, topPaths });
+});
+
 // Recent notification attempts with their actual provider error text — the
 // /admin/stats counts tell you *how many* failed, this tells you *why*. Most
 // useful filtered to ?status=failed. Defaults to the last 50 across all

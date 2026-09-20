@@ -141,6 +141,7 @@ export default function AdminDashboard({ toast }) {
   const [cityFilter, setCityFilter] = useState("all");
   const [userData, setUserData] = useState(null);
   const [roleFilter, setRoleFilter] = useState("all");
+  const [traffic, setTraffic] = useState(null);
 
   const load = useCallback(() => {
     api("/admin/stats").then(setStats).catch((e) => toast(e.message, true));
@@ -148,6 +149,7 @@ export default function AdminDashboard({ toast }) {
     api("/admin/issues").then(setIssues).catch(() => {});
     api("/admin/message-flags").then(setFlags).catch(() => {});
     api("/admin/users").then(setUserData).catch(() => {});
+    api("/admin/traffic").then(setTraffic).catch(() => {});
   }, [toast]);
 
   useEffect(() => { load(); }, [load]);
@@ -183,7 +185,7 @@ export default function AdminDashboard({ toast }) {
 
       {/* Sub-tabs */}
       <div className="flex rounded-lg p-1" style={{ backgroundColor: C.maple }}>
-        {[["overview", "Overview"], ["issues", `Issues${stats.openIssues > 0 ? ` (${stats.openIssues})` : ""}`], ["flags", `Flags${unreviewedFlags.length > 0 ? ` (${unreviewedFlags.length})` : ""}`], ["gigs", "Recent gigs"], ["users", "Users"]].map(([key, label]) => (
+        {[["overview", "Overview"], ["issues", `Issues${stats.openIssues > 0 ? ` (${stats.openIssues})` : ""}`], ["flags", `Flags${unreviewedFlags.length > 0 ? ` (${unreviewedFlags.length})` : ""}`], ["gigs", "Recent gigs"], ["users", "Users"], ["traffic", "Traffic"]].map(([key, label]) => (
           <button key={key} onClick={() => setTab(key)}
             className="flex-1 rounded-md py-1.5 text-xs font-bold"
             style={tab === key ? { backgroundColor: C.navy, color: "#fff" } : { color: C.navy }}>
@@ -428,6 +430,80 @@ export default function AdminDashboard({ toast }) {
             </div>
           ))}
         </div>
+        );
+      })()}
+
+      {/* TRAFFIC — free, self-hosted view counter (Sep19). No login required to
+          be counted, no cookies/IP stored, just a synthetic screen name + a
+          random localStorage id so repeat visits from the same browser count
+          as one visitor. */}
+      {tab === "traffic" && (() => {
+        if (!traffic) {
+          return (
+            <div className="rounded-xl border bg-white p-6 text-center text-sm" style={{ borderColor: C.mapleLine, color: C.ink60 }}>
+              Loading traffic…
+            </div>
+          );
+        }
+        const friendlyPath = (p) => {
+          if (p === "/login") return "Login screen";
+          const parts = p.split("/").filter(Boolean);
+          const MODE = { organize: "Organize", scorekeep: "Scorekeep" };
+          const SCREEN = { gigs: "Gigs", post: "Post a gig", card: "Payment setup", profile: "Profile", admin: "Admin dashboard" };
+          if (parts.length === 2) return `${MODE[parts[0]] || parts[0]} · ${SCREEN[parts[1]] || parts[1]}`;
+          return p;
+        };
+        const maxDay = Math.max(1, ...traffic.dailySeries.map((d) => d.count));
+        const dayLabel = (iso) => {
+          const d = new Date(`${iso}T00:00:00`);
+          return d.toLocaleDateString(undefined, { weekday: "short" }).slice(0, 2);
+        };
+        return (
+          <div className="space-y-3">
+            <div className="grid grid-cols-4 gap-2">
+              {[["Today", traffic.viewsToday], ["7 days", traffic.viewsLast7Days], ["30 days", traffic.viewsLast30Days], ["All time", traffic.totalViews]].map(([label, n]) => (
+                <div key={label} className="rounded-xl border bg-white p-3 text-center" style={{ borderColor: C.mapleLine }}>
+                  <div className="sg-display sg-num text-xl" style={{ color: C.navy }}>{n}</div>
+                  <div className="text-[10px] uppercase tracking-wide" style={{ color: C.ink60 }}>{label}</div>
+                </div>
+              ))}
+            </div>
+
+            <div className="rounded-xl border bg-white p-3 text-center" style={{ borderColor: C.mapleLine }}>
+              <div className="sg-display sg-num text-xl" style={{ color: C.navy }}>{traffic.uniqueVisitors30d}</div>
+              <div className="text-[10px] uppercase tracking-wide" style={{ color: C.ink60 }}>Unique visitors · last 30 days</div>
+            </div>
+
+            <div className="rounded-xl border bg-white p-4" style={{ borderColor: C.mapleLine }}>
+              <h3 className="sg-display text-sm" style={{ color: C.navy }}>LAST 14 DAYS</h3>
+              <div className="mt-3 flex items-end gap-1" style={{ height: 80 }}>
+                {traffic.dailySeries.map((d) => (
+                  <div key={d.date} className="flex flex-1 flex-col items-center justify-end gap-1" title={`${d.date}: ${d.count} view${d.count === 1 ? "" : "s"}`}>
+                    <div className="w-full rounded-t" style={{
+                      height: `${Math.max(3, Math.round((d.count / maxDay) * 64))}px`,
+                      backgroundColor: d.count > 0 ? C.amber : C.mapleLine,
+                    }} />
+                    <div className="text-[9px]" style={{ color: C.ink40 }}>{dayLabel(d.date)}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-xl border bg-white p-4" style={{ borderColor: C.mapleLine }}>
+              <h3 className="sg-display text-sm" style={{ color: C.navy }}>TOP SCREENS · LAST 30 DAYS</h3>
+              {traffic.topPaths.length === 0 && (
+                <p className="mt-2 text-sm" style={{ color: C.ink60 }}>No traffic recorded yet.</p>
+              )}
+              <div className="mt-2 space-y-1.5">
+                {traffic.topPaths.map((p) => (
+                  <div key={p.path} className="flex items-center justify-between text-sm">
+                    <span style={{ color: C.navy }}>{friendlyPath(p.path)}</span>
+                    <span className="sg-num font-bold" style={{ color: C.ink60 }}>{p.n}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         );
       })()}
     </div>

@@ -173,11 +173,6 @@ function GameRow({ game, idx, onChange, onRemove, canRemove, lbl, input, showGam
         </p>
       )}
       <div>
-        <label className={lbl} style={{ color: C.ink60 }}>Division <span style={{ color: C.ink40 }}>(optional)</span></label>
-        <input className={input} style={{ borderColor: C.mapleLine }} value={game.division}
-          onChange={(e) => set("division", e.target.value)} placeholder="e.g. 2014 AAA" />
-      </div>
-      <div>
         <label className={lbl} style={{ color: C.ink60 }}>Rink / court <span style={{ color: C.ink40 }}>(optional)</span></label>
         <input className={input} style={{ borderColor: C.mapleLine }} value={game.rink}
           onChange={(e) => set("rink", e.target.value)} placeholder="e.g. Rink 2" />
