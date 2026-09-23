@@ -2,6 +2,7 @@
 // roles (organizer + scorekeeper). Age range is collected at signup; 12–17
 // routes payouts through a guardian later in the flow.
 import { useState } from "react";
+import { Megaphone, ClipboardList, DollarSign, CheckCircle2, GraduationCap } from "lucide-react";
 import { C } from "./theme.js";
 import { api, setToken } from "./api.js";
 import TermsModal from "./components/TermsModal.jsx";
@@ -77,6 +78,14 @@ export default function Login({ onAuthed }) {
 
   const goMode = (m) => { setMode(m); setErr(null); setNotice(null); };
 
+  // Landing-page CTA (Sep22): jump straight into the signup tab and scroll
+  // the form into view, so "Get started" and "explain what this is" live on
+  // one page instead of sending people to a separate marketing site first.
+  const goSignUp = () => {
+    goMode("signup");
+    document.getElementById("join")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   const input = "w-full rounded-lg border px-3 py-2.5 text-sm";
   const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const canSubmit = mode === "forgot"
@@ -87,15 +96,89 @@ export default function Login({ onAuthed }) {
     : email && password;
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4" style={{ backgroundColor: C.navy }}>
-      <div className="w-full max-w-sm space-y-4">
-        <div className="text-center">
-          <div className="sg-display text-4xl text-white">SCORE<span style={{ color: C.amber }}>GIG</span></div>
-          <p className="mt-1 text-sm font-semibold tracking-wide" style={{ color: "rgba(255,255,255,0.75)" }}>
-            GET PAID TO KEEP SCORE
-          </p>
-        </div>
+    <div className="min-h-screen" style={{ backgroundColor: C.navy }}>
+      {/* HERO — explains ScoreGIG to a first-time visitor, before any form (Sep22) */}
+      <div className="px-4 pb-8 pt-12 text-center">
+        <div className="sg-display text-4xl text-white">SCORE<span style={{ color: C.amber }}>GIG</span></div>
+        <p className="mt-2 text-sm font-semibold tracking-wide" style={{ color: "rgba(255,255,255,0.75)" }}>
+          CANADA'S MARKETPLACE FOR GAME-DAY SCOREKEEPERS
+        </p>
+        <p className="mx-auto mt-4 max-w-md text-sm leading-relaxed" style={{ color: "rgba(255,255,255,0.85)" }}>
+          Youth sports organizers need someone at every game to run the clock and keep the scoresheet.
+          ScoreGIG connects them with people nearby who want to do it — and get paid every time.
+        </p>
+        <button onClick={goSignUp}
+          className="mt-6 rounded-lg px-6 py-3 text-sm font-bold"
+          style={{ backgroundColor: C.amber, color: C.navy }}>
+          Get started — it's free
+        </button>
+      </div>
 
+      {/* HOW IT WORKS — one card per side of the marketplace, each with a punchy reason list (Sep22) */}
+      <div className="mx-auto max-w-2xl px-4 pb-6">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-2xl border p-4" style={{ borderColor: "rgba(255,255,255,0.15)", backgroundColor: "rgba(255,255,255,0.05)" }}>
+            <Megaphone size={22} color={C.amber} />
+            <h3 className="mt-2 text-sm font-bold text-white">Organizing a game?</h3>
+            <p className="mt-1 text-[13px] leading-relaxed" style={{ color: "rgba(255,255,255,0.75)" }}>
+              Stop scrambling for a scorekeeper the night before. Post the date, time, rink, and pay —
+              someone local claims it, and you're covered.
+            </p>
+            <ul className="mt-3 space-y-1.5">
+              {[
+                "Posted in minutes, filled by people nearby",
+                "No subscription, nothing charged upfront",
+                "Your card is only billed once you approve someone",
+              ].map((t) => (
+                <li key={t} className="flex items-start gap-1.5 text-[12px]" style={{ color: "rgba(255,255,255,0.7)" }}>
+                  <CheckCircle2 size={14} color={C.amber} className="mt-0.5 shrink-0" />
+                  {t}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="rounded-2xl border p-4" style={{ borderColor: "rgba(255,255,255,0.15)", backgroundColor: "rgba(255,255,255,0.05)" }}>
+            <ClipboardList size={22} color={C.amber} />
+            <h3 className="mt-2 text-sm font-bold text-white">Want to keep score?</h3>
+            <p className="mt-1 text-[13px] leading-relaxed" style={{ color: "rgba(255,255,255,0.75)" }}>
+              Turn game nights you'd already be at into paid ones. Claim gigs that fit your schedule
+              and get paid directly — no experience required to start.
+            </p>
+            <ul className="mt-3 space-y-1.5">
+              {[
+                "You keep 100% of your listed pay — no cut taken",
+                "Pick the games that work for you, nothing more",
+                "Build a resume of real, paid responsibility",
+              ].map((t) => (
+                <li key={t} className="flex items-start gap-1.5 text-[12px]" style={{ color: "rgba(255,255,255,0.7)" }}>
+                  <CheckCircle2 size={14} color={C.amber} className="mt-0.5 shrink-0" />
+                  {t}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      {/* YOUTH EMPLOYMENT CALLOUT — promotes hiring local youth scorekeepers (Sep22) */}
+      <div className="mx-auto max-w-2xl px-4 pb-10">
+        <div className="flex gap-3 rounded-2xl p-4" style={{ backgroundColor: C.amber }}>
+          <GraduationCap size={26} color={C.navy} className="mt-0.5 shrink-0" />
+          <div>
+            <h3 className="text-sm font-bold" style={{ color: C.navy }}>Put local youth to work</h3>
+            <p className="mt-1 text-[13px] leading-relaxed" style={{ color: C.navy }}>
+              A lot of our scorekeepers are students 15 and up from the same community as the game
+              they're working — kids who already know the rink and love the sport. For organizers,
+              that's a reliable scorekeeper who actually wants to be there. For students, it's real
+              paid work that fits around school, without needing a part-time job on top of it.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* SIGN UP / LOG IN */}
+      <div id="join" className="flex justify-center px-4 pb-14">
+      <div className="w-full max-w-sm space-y-4">
         <div className="space-y-3 rounded-2xl bg-white p-5">
           {/* Tab switch */}
           {mode !== "forgot" && (
@@ -297,6 +380,7 @@ export default function Login({ onAuthed }) {
             </button>.
           </p>
         </div>
+      </div>
       </div>
       {showTerms && (
         <TermsModal readOnly onClose={() => setShowTerms(false)} onAccept={() => setShowTerms(false)} />

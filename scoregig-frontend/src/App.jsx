@@ -130,9 +130,14 @@ export default function App() {
   // the login screen, or a mode/tab combo once signed in. This is an SPA
   // with no URL routing, so "path" here is a synthetic screen name, not an
   // actual URL.
+  // Skip it entirely for the admin account (Sep21) — otherwise every time
+  // Nate checks the app himself, it counts as a "visitor" and pollutes the
+  // Traffic tab. Once he's signed in as admin, nothing he does gets tracked;
+  // everyone else (including him signed out, e.g. on the login screen) still is.
   useEffect(() => {
+    if (authed && me?.isAdmin) return;
     trackView(authed ? `/${mode}/${tab}` : "/login");
-  }, [authed, mode, tab]);
+  }, [authed, mode, tab, me]);
 
   // Central sign-out — used by the header button, the idle timer, and any 401.
   const logout = useCallback((reason) => {
