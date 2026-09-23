@@ -1,0 +1,834 @@
+<title>Scoreboard Op</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=JetBrains+Mono:wght@500;700&family=Work+Sans:wght@400;500;600;700&display=swap">
+<style>
+  :root{
+    --navy-deep:#081120;
+    --panel:#0e1e34;
+    --panel-raised:#122544;
+    --panel-edge:#25405f;
+    --amber:#ffb020;
+    --amber-dim:#8a611c;
+    --red:#ff5252;
+    --ice:#eef4f9;
+    --muted:#7f93ad;
+    --gold:#e8b74b;
+    --gold-ink:#241705;
+    --ok:#4ade80;
+    --bad:#f87171;
+  }
+
+  *{box-sizing:border-box;}
+  body{
+    background:var(--navy-deep);
+    color:var(--ice);
+    min-height:100%;
+    display:flex;
+    justify-content:center;
+    font-family:'Work Sans',system-ui,sans-serif;
+  }
+
+  .stage{
+    width:100%;
+    max-width:460px;
+    padding:24px 16px calc(24px + env(safe-area-inset-bottom, 0px));
+    display:flex;
+    flex-direction:column;
+    gap:16px;
+  }
+
+  /* ---------- background arena texture ---------- */
+  body{
+    background:
+      radial-gradient(ellipse 900px 500px at 50% -10%, rgba(255,176,32,0.10), transparent 60%),
+      repeating-linear-gradient(180deg, rgba(255,255,255,0.015) 0 2px, transparent 2px 4px),
+      var(--navy-deep);
+  }
+
+  /* ---------- console shell ---------- */
+  .console{
+    background:linear-gradient(180deg,#0c1c33,#081324);
+    border:1px solid var(--panel-edge);
+    border-radius:20px;
+    padding:16px;
+    box-shadow:0 30px 60px -25px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.05);
+    display:flex;
+    flex-direction:column;
+    gap:14px;
+  }
+
+  .console-head{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    padding:0 4px;
+  }
+  .brand{
+    font-family:'Bebas Neue',sans-serif;
+    letter-spacing:0.12em;
+    font-size:22px;
+    color:var(--gold);
+  }
+  .tag{
+    font-size:11px;
+    letter-spacing:0.14em;
+    color:var(--muted);
+    text-transform:uppercase;
+    font-weight:600;
+  }
+
+  /* ---------- LED readout ---------- */
+  .readout{
+    background:radial-gradient(ellipse at 50% 0%, #0a1930, #060f1d);
+    border:1px solid var(--panel-edge);
+    border-radius:14px;
+    padding:14px 10px;
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+  }
+  .readout-row{
+    display:flex;
+    align-items:stretch;
+    gap:8px;
+  }
+  .field{
+    flex:1;
+    background:rgba(0,0,0,0.35);
+    border:1px solid rgba(255,255,255,0.06);
+    border-radius:10px;
+    padding:8px 6px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:4px;
+    min-width:0;
+    transition:box-shadow .15s ease, border-color .15s ease;
+  }
+  .field.clock{flex:1.4;}
+  .field.active{
+    border-color:var(--amber);
+    box-shadow:0 0 0 1px var(--amber), 0 0 18px -2px rgba(255,176,32,0.55);
+  }
+  .field.correct{border-color:var(--ok); box-shadow:0 0 18px -2px rgba(74,222,128,0.6);}
+  .field.wrong{border-color:var(--bad); box-shadow:0 0 18px -2px rgba(248,113,113,0.6);}
+
+  .f-label{
+    font-size:9.5px;
+    letter-spacing:0.16em;
+    color:var(--muted);
+    font-weight:600;
+  }
+  .f-val{
+    font-family:'JetBrains Mono',monospace;
+    font-weight:700;
+    font-size:26px;
+    line-height:1;
+    color:var(--amber);
+    text-shadow:0 0 12px rgba(255,176,32,0.55);
+    font-variant-numeric:tabular-nums;
+    white-space:nowrap;
+  }
+  .field.wrong .f-val{color:var(--red); text-shadow:0 0 12px rgba(255,82,82,0.6);}
+
+  .readout-row.score{align-items:center;}
+  .team{
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:2px;
+  }
+  .team .f-val{font-size:34px;}
+  .team.home .f-val{color:var(--ice); text-shadow:none;}
+  .team.away .f-val{color:var(--ice); text-shadow:none;}
+  .team.flash .f-val{color:var(--amber); text-shadow:0 0 14px rgba(255,176,32,0.6);}
+  .team.wrong .f-val{color:var(--bad); text-shadow:0 0 14px rgba(248,113,113,0.6);}
+  .vs{
+    font-family:'Bebas Neue',sans-serif;
+    color:var(--muted);
+    font-size:16px;
+    padding-bottom:2px;
+  }
+
+  /* ---------- screen area (start / play / end) ---------- */
+  .screen{display:flex; flex-direction:column; gap:14px;}
+
+  h1.title{
+    font-family:'Bebas Neue',sans-serif;
+    font-size:40px;
+    letter-spacing:0.02em;
+    line-height:1;
+    color:var(--ice);
+    margin:0;
+    text-wrap:balance;
+  }
+  p.lede{
+    margin:0;
+    color:var(--muted);
+    font-size:14.5px;
+    line-height:1.5;
+  }
+
+  .btn{
+    appearance:none;
+    border:none;
+    border-radius:12px;
+    padding:14px 18px;
+    font-family:'Work Sans',sans-serif;
+    font-weight:700;
+    font-size:15px;
+    letter-spacing:0.01em;
+    cursor:pointer;
+    transition:transform .08s ease, filter .15s ease;
+  }
+  .btn:active{transform:scale(0.97);}
+  .btn:focus-visible{outline:2px solid var(--amber); outline-offset:2px;}
+  .btn-gold{
+    background:linear-gradient(180deg,#f6cd6e,var(--gold));
+    color:var(--gold-ink);
+    box-shadow:0 8px 20px -8px rgba(232,183,75,0.7);
+  }
+  .btn-gold:hover{filter:brightness(1.06);}
+  .btn-ghost{
+    background:transparent;
+    border:1px solid var(--panel-edge);
+    color:var(--ice);
+  }
+
+  /* ---------- banner + shot clock ---------- */
+  .banner{
+    background:var(--panel);
+    border:1px solid var(--panel-edge);
+    border-radius:12px;
+    padding:12px 14px;
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+  }
+  .banner .calltag{
+    font-size:10px;
+    letter-spacing:0.14em;
+    text-transform:uppercase;
+    color:var(--ice);
+    font-weight:700;
+    background:rgba(255,255,255,0.08);
+    border-radius:6px;
+    padding:2px 6px;
+    display:inline-block;
+    width:fit-content;
+  }
+  .banner .ctx{
+    font-size:10.5px;
+    letter-spacing:0.14em;
+    text-transform:uppercase;
+    color:var(--amber);
+    font-weight:700;
+  }
+  .banner .instr{
+    font-size:16px;
+    font-weight:600;
+    color:var(--ice);
+    line-height:1.35;
+  }
+  .shotclock{
+    height:6px;
+    border-radius:4px;
+    background:rgba(255,255,255,0.07);
+    overflow:hidden;
+  }
+  .shotclock-bar{
+    height:100%;
+    background:linear-gradient(90deg,var(--gold),var(--amber));
+    width:100%;
+    transform-origin:left;
+    transition:width .1s linear, background-color .2s ease;
+  }
+  .shotclock-bar.urgent{background:linear-gradient(90deg,var(--red),#ff8a8a);}
+
+  .streak-pill{
+    display:inline-flex;
+    align-items:center;
+    gap:4px;
+    background:rgba(255,176,32,0.12);
+    border:1px solid rgba(255,176,32,0.35);
+    color:var(--amber);
+    font-family:'JetBrains Mono',monospace;
+    font-size:11px;
+    font-weight:700;
+    padding:3px 9px;
+    border-radius:20px;
+    align-self:center;
+  }
+
+  /* ---------- controls ---------- */
+  .controls{display:flex; flex-direction:column; gap:10px;}
+  .goal-row{display:flex; gap:10px;}
+  .goal-btn{
+    flex:1;
+    background:var(--panel-raised);
+    border:1px solid var(--panel-edge);
+    color:var(--ice);
+    border-radius:12px;
+    padding:16px 10px;
+    font-weight:700;
+    font-size:14px;
+    text-align:center;
+    transition:box-shadow .12s ease, border-color .12s ease;
+  }
+  .goal-btn .plus{display:block; font-family:'Bebas Neue',sans-serif; font-size:26px; color:var(--amber);}
+  .goal-btn.selected{
+    border-color:var(--amber);
+    box-shadow:0 0 0 1px var(--amber), 0 0 16px -2px rgba(255,176,32,0.5);
+    background:#16305a;
+  }
+
+  .keypad{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:8px;
+  }
+  .key{
+    background:var(--panel-raised);
+    border:1px solid var(--panel-edge);
+    color:var(--ice);
+    border-radius:10px;
+    padding:14px 0;
+    font-family:'JetBrains Mono',monospace;
+    font-size:19px;
+    font-weight:700;
+    text-align:center;
+  }
+  .key.clear{color:var(--red); font-family:'Work Sans',sans-serif; font-size:12px; letter-spacing:0.08em;}
+
+  .enter-btn{
+    width:100%;
+    background:var(--gold);
+    color:var(--gold-ink);
+    border:none;
+    border-radius:10px;
+    padding:14px 0;
+    font-family:'Work Sans',sans-serif;
+    font-weight:700;
+    font-size:13px;
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+  }
+  .enter-btn:disabled{opacity:0.32; filter:grayscale(0.3);}
+
+  .period-btn{
+    background:var(--panel-raised);
+    border:1px solid var(--panel-edge);
+    color:var(--ice);
+    border-radius:12px;
+    padding:18px 10px;
+    font-family:'Bebas Neue',sans-serif;
+    font-size:20px;
+    letter-spacing:0.04em;
+  }
+
+  .feedback{
+    text-align:center;
+    font-family:'Bebas Neue',sans-serif;
+    font-size:22px;
+    letter-spacing:0.03em;
+    min-height:28px;
+  }
+  .feedback.ok{color:var(--ok);}
+  .feedback.bad{color:var(--bad);}
+
+  .progress-dots{display:flex; gap:6px; justify-content:center;}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--panel-edge);}
+  .dot.done{background:var(--ok);}
+  .dot.missed{background:var(--bad);}
+  .dot.current{background:var(--amber); box-shadow:0 0 8px rgba(255,176,32,0.8);}
+
+  /* ---------- end screen ---------- */
+  .stat-row{display:flex; gap:10px;}
+  .stat{
+    flex:1;
+    background:var(--panel);
+    border:1px solid var(--panel-edge);
+    border-radius:12px;
+    padding:14px 8px;
+    text-align:center;
+  }
+  .stat .num{
+    font-family:'JetBrains Mono',monospace;
+    font-weight:700;
+    font-size:26px;
+    color:var(--amber);
+    font-variant-numeric:tabular-nums;
+  }
+  .stat .cap{
+    font-size:9.5px;
+    letter-spacing:0.1em;
+    text-transform:uppercase;
+    color:var(--muted);
+    margin-top:4px;
+  }
+  .cta-line{
+    font-size:13px;
+    color:var(--muted);
+    text-align:center;
+    line-height:1.5;
+  }
+  footer.foot{
+    text-align:center;
+    font-size:11px;
+    color:var(--muted);
+    letter-spacing:0.06em;
+  }
+  footer.foot a{color:var(--amber); text-decoration:none;}
+
+  @media (prefers-reduced-motion: reduce){
+    .btn, .shotclock-bar{transition:none;}
+  }
+</style>
+
+<div class="stage">
+  <div class="console">
+    <div class="console-head">
+      <span class="brand">SCOREGIG</span>
+      <span class="tag">Scoreboard Op</span>
+    </div>
+
+    <div class="readout">
+      <div class="readout-row main">
+        <div class="field" id="field-period">
+          <span class="f-label">PER</span>
+          <span class="f-val" id="val-period">1</span>
+        </div>
+        <div class="field clock" id="field-clock">
+          <span class="f-label">CLOCK</span>
+          <span class="f-val" id="val-clock">--:--</span>
+        </div>
+        <div class="field" id="field-penalty">
+          <span class="f-label">PEN</span>
+          <span class="f-val" id="val-penalty">--:--</span>
+        </div>
+      </div>
+      <div class="readout-row score">
+        <div class="team home" id="team-home">
+          <span class="f-label">HOME</span>
+          <span class="f-val" id="val-home">0</span>
+        </div>
+        <div class="vs">&ndash;</div>
+        <div class="team away" id="team-away">
+          <span class="f-label">AWAY</span>
+          <span class="f-val" id="val-away">0</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen" id="screen"></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* Each round is one or more "calls" that share a single shot clock.
+     A round with two calls (coincidental penalties) must have both
+     logged correctly before the timer runs out. */
+  var ROUNDS = [
+    { time:7000, calls:[
+      {type:"clock", ctx:"Period 1 · Puck drop", instr:"Set the clock to 12:00", target:"1200"}
+    ]},
+    { time:6000, calls:[
+      {type:"goal", ctx:"Live play", instr:"HOME scores. Log it.", team:"home"}
+    ]},
+    { time:6500, calls:[
+      {type:"penalty", ctx:"Whistle", instr:"HOME penalty — too many men, 02:00.", team:"home", target:"0200"}
+    ]},
+    { time:5000, calls:[
+      {type:"period", ctx:"Horn sounds", instr:"End of period. Advance to Period 2.", target:"2"}
+    ]},
+    { time:5000, calls:[
+      {type:"goal", ctx:"Live play", instr:"AWAY scores. Log it.", team:"away"}
+    ]},
+    { time:8500, calls:[
+      {type:"penalty", ctx:"Whistle · Coincidental minors", instr:"HOME penalty — high-sticking, 02:00.", team:"home", target:"0200"},
+      {type:"penalty", ctx:"Whistle · Coincidental minors", instr:"AWAY penalty — roughing, 02:00.", team:"away", target:"0200"}
+    ]},
+    { time:4500, calls:[
+      {type:"clock", ctx:"Period 3 · Puck drop", instr:"Reset the clock to 20:00", target:"2000"}
+    ]}
+  ];
+  var TICK = 100;
+  var MAX_MULT = 2.0;
+  var MULT_STEP = 0.15;
+
+  var state = {
+    round:0,
+    callIndex:0,
+    callResults:[],
+    score:0,
+    streak:0,
+    bestStreak:0,
+    results:[],     // "ok" | "bad" per round
+    period:1,
+    home:0,
+    away:0,
+    digits:[],
+    selectedTeam:null,
+    timer:null,
+    remaining:0,
+    roundTime:0
+  };
+
+  var $screen = document.getElementById("screen");
+  var els = {
+    period: document.getElementById("val-period"),
+    clock: document.getElementById("val-clock"),
+    penalty: document.getElementById("val-penalty"),
+    home: document.getElementById("val-home"),
+    away: document.getElementById("val-away"),
+    fPeriod: document.getElementById("field-period"),
+    fClock: document.getElementById("field-clock"),
+    fPenalty: document.getElementById("field-penalty"),
+    tHome: document.getElementById("team-home"),
+    tAway: document.getElementById("team-away")
+  };
+
+  function fmt(digitsStr){
+    var d = digitsStr.padStart(4,"0").slice(-4);
+    return d.slice(0,2) + ":" + d.slice(2,4);
+  }
+
+  function clearFieldStates(){
+    [els.fPeriod, els.fClock, els.fPenalty].forEach(function(f){
+      f.classList.remove("active","correct","wrong");
+    });
+    els.tHome.classList.remove("flash","wrong");
+    els.tAway.classList.remove("flash","wrong");
+  }
+
+  function renderReadout(){
+    els.period.textContent = state.period;
+    els.home.textContent = state.home;
+    els.away.textContent = state.away;
+  }
+
+  function currentRound(){ return ROUNDS[state.round]; }
+  function currentCall(){ return ROUNDS[state.round].calls[state.callIndex]; }
+  function multiplier(){ return Math.min(MAX_MULT, 1 + state.streak * MULT_STEP); }
+
+  /* ---------------- START SCREEN ---------------- */
+  function renderStart(){
+    clearFieldStates();
+    els.clock.textContent = "--:--";
+    els.penalty.textContent = "--:--";
+    state.period = 1; state.home = 0; state.away = 0;
+    renderReadout();
+
+    $screen.innerHTML =
+      '<h1 class="title">Run the clock.</h1>' +
+      '<p class="lede">Calls come in fast and the clock keeps shrinking. Pick the team, log the value, confirm — string calls together for a bigger multiplier. This is what a real scorekeeper does, every shift.</p>' +
+      '<button class="btn btn-gold" id="btn-start">Start Shift</button>';
+
+    document.getElementById("btn-start").addEventListener("click", startGame);
+  }
+
+  function startGame(){
+    state.round = 0;
+    state.score = 0;
+    state.streak = 0;
+    state.bestStreak = 0;
+    state.results = [];
+    state.period = 1;
+    state.home = 0;
+    state.away = 0;
+    renderReadout();
+    nextRound();
+  }
+
+  /* ---------------- PLAY SCREEN ---------------- */
+  function nextRound(){
+    clearFieldStates();
+    if(state.round >= ROUNDS.length){
+      endGame();
+      return;
+    }
+    state.callIndex = 0;
+    state.callResults = [];
+    state.digits = [];
+    state.selectedTeam = null;
+    state.roundTime = currentRound().time;
+    state.remaining = state.roundTime;
+    renderPlay();
+    updateShotClock();
+    state.timer = setInterval(function(){
+      state.remaining -= TICK;
+      if(state.remaining <= 0){
+        clearInterval(state.timer);
+        timeoutRound();
+      } else {
+        updateShotClock();
+      }
+    }, TICK);
+  }
+
+  function renderPlay(){
+    var round = currentRound();
+    var call = currentCall();
+
+    var dots = "";
+    for(var i=0;i<ROUNDS.length;i++){
+      var cls = "dot";
+      if(i < state.results.length) cls += state.results[i] === "ok" ? " done" : " missed";
+      else if(i === state.round) cls += " current";
+      dots += '<span class="' + cls + '"></span>';
+    }
+
+    var calltag = round.calls.length > 1
+      ? '<span class="calltag">Call ' + (state.callIndex+1) + ' of ' + round.calls.length + '</span>'
+      : '';
+
+    var streakTag = state.streak >= 2
+      ? '<span class="streak-pill">STREAK &times;' + multiplier().toFixed(2) + '</span>'
+      : '';
+
+    var controlsHtml = "";
+    if(call.type === "clock"){
+      controlsHtml = keypadHtml() + '<button class="enter-btn" id="btn-enter">Confirm</button>';
+    } else if(call.type === "penalty"){
+      controlsHtml = teamRowHtml(false) + keypadHtml() + '<button class="enter-btn" id="btn-enter" disabled>Confirm</button>';
+    } else if(call.type === "goal"){
+      controlsHtml = teamRowHtml(true) + '<button class="enter-btn" id="btn-enter" disabled>Confirm</button>';
+    } else if(call.type === "period"){
+      controlsHtml = '<button class="period-btn" id="btn-period" style="width:100%;">PERIOD +1</button>';
+    }
+
+    $screen.innerHTML =
+      '<div class="banner">' +
+        calltag +
+        '<span class="ctx">' + call.ctx + '</span>' +
+        '<span class="instr">' + call.instr + '</span>' +
+        '<div class="shotclock"><div class="shotclock-bar" id="shotbar"></div></div>' +
+      '</div>' +
+      '<div class="controls">' + controlsHtml + '</div>' +
+      '<div class="feedback" id="feedback">' + streakTag + '</div>' +
+      '<div class="progress-dots">' + dots + '</div>';
+
+    if(call.type === "clock") els.fClock.classList.add("active");
+    if(call.type === "penalty") els.fPenalty.classList.add("active");
+    if(call.type === "period") els.fPeriod.classList.add("active");
+
+    wireControls(call);
+  }
+
+  function keypadHtml(){
+    var digits = [1,2,3,4,5,6,7,8,9].map(function(n){
+      return '<button class="key" data-digit="'+n+'">'+n+'</button>';
+    }).join("");
+    return '<div class="keypad" id="keypad">' + digits +
+      '<button class="key clear" id="key-clear">CLR</button>' +
+      '<button class="key" data-digit="0">0</button>' +
+      '</div>';
+  }
+
+  function teamRowHtml(isGoal){
+    var homeLabel = isGoal ? '<span class="plus">+1</span>HOME' : 'HOME';
+    var awayLabel = isGoal ? '<span class="plus">+1</span>AWAY' : 'AWAY';
+    return '<div class="goal-row" id="team-row">' +
+      '<button class="goal-btn" id="btn-team-home" data-team="home">' + homeLabel + '</button>' +
+      '<button class="goal-btn" id="btn-team-away" data-team="away">' + awayLabel + '</button>' +
+    '</div>';
+  }
+
+  function wireControls(call){
+    var enterBtn = document.getElementById("btn-enter");
+    var target = call.type === "penalty" ? els.penalty : els.clock;
+
+    if(call.type === "clock" || call.type === "penalty"){
+      target.textContent = fmt(state.digits.join(""));
+      document.getElementById("keypad").addEventListener("click", function(e){
+        var btn = e.target.closest("button");
+        if(!btn) return;
+        if(btn.id === "key-clear"){ state.digits = []; }
+        else if(btn.dataset.digit !== undefined){
+          if(state.digits.length < 4) state.digits.push(btn.dataset.digit);
+        }
+        target.textContent = fmt(state.digits.join(""));
+      });
+    }
+
+    var teamRow = document.getElementById("team-row");
+    if(teamRow){
+      teamRow.addEventListener("click", function(e){
+        var btn = e.target.closest("button");
+        if(!btn) return;
+        state.selectedTeam = btn.dataset.team;
+        teamRow.querySelectorAll(".goal-btn").forEach(function(b){
+          b.classList.toggle("selected", b.dataset.team === state.selectedTeam);
+        });
+        if(enterBtn) enterBtn.disabled = false;
+      });
+    }
+
+    if(call.type === "goal" && enterBtn){
+      enterBtn.addEventListener("click", function(){
+        if(!state.selectedTeam) return;
+        var chosen = state.selectedTeam;
+        if(chosen === "home") state.home++; else state.away++;
+        renderReadout();
+        var el = chosen === "home" ? els.tHome : els.tAway;
+        el.classList.add(chosen === call.team ? "flash" : "wrong");
+        submitCall(chosen === call.team);
+      });
+    } else if(call.type === "penalty" && enterBtn){
+      enterBtn.addEventListener("click", function(){
+        if(!state.selectedTeam) return;
+        var val = state.digits.join("").padStart(4,"0").slice(-4);
+        var correct = state.selectedTeam === call.team && val === call.target;
+        if(!correct) els.penalty.textContent = fmt(call.target);
+        submitCall(correct);
+      });
+    } else if(call.type === "clock" && enterBtn){
+      enterBtn.addEventListener("click", function(){
+        var val = state.digits.join("").padStart(4,"0").slice(-4);
+        var correct = val === call.target;
+        if(!correct) els.clock.textContent = fmt(call.target);
+        submitCall(correct);
+      });
+    } else if(call.type === "period"){
+      document.getElementById("btn-period").addEventListener("click", function(){
+        state.period = parseInt(call.target,10);
+        renderReadout();
+        submitCall(true);
+      });
+    }
+  }
+
+  function updateShotClock(){
+    var pct = Math.max(0, state.remaining / state.roundTime * 100);
+    var bar = document.getElementById("shotbar");
+    if(!bar) return;
+    bar.style.width = pct + "%";
+    if(pct < 30) bar.classList.add("urgent"); else bar.classList.remove("urgent");
+  }
+
+  function flashCallFeedback(call, correct){
+    if(call.type === "clock"){
+      els.fClock.classList.add(correct ? "correct" : "wrong");
+    } else if(call.type === "penalty"){
+      els.fPenalty.classList.add(correct ? "correct" : "wrong");
+    } else if(call.type === "period"){
+      els.fPeriod.classList.add("correct");
+    }
+  }
+
+  function submitCall(correct){
+    var round = currentRound();
+    var call = currentCall();
+    var roundToken = state.round;
+    state.callResults.push(correct);
+    flashCallFeedback(call, correct);
+
+    var isLastCall = state.callIndex === round.calls.length - 1;
+    // Stop the shot clock the instant the deciding call lands, so a
+    // near-simultaneous timeout can't also finalize this round.
+    if(isLastCall) clearInterval(state.timer);
+
+    setTimeout(function(){
+      if(state.round !== roundToken) return; // a timeout already finalized this round
+      if(isLastCall){
+        finalizeRound();
+      } else {
+        clearFieldStates();
+        state.callIndex++;
+        state.digits = [];
+        state.selectedTeam = null;
+        renderPlay();
+        updateShotClock();
+      }
+    }, 450);
+  }
+
+  function timeoutRound(){
+    var round = currentRound();
+    while(state.callResults.length < round.calls.length){
+      state.callResults.push(false);
+    }
+    finalizeRound();
+  }
+
+  function finalizeRound(){
+    var fb = document.getElementById("feedback");
+    var allCorrect = state.callResults.length > 0 && state.callResults.every(function(x){ return x; });
+
+    if(allCorrect){
+      state.streak++;
+      if(state.streak > state.bestStreak) state.bestStreak = state.streak;
+      var mult = multiplier();
+      var bonus = Math.round(Math.max(0, state.remaining) / 100);
+      var pts = Math.round((100 + bonus) * mult);
+      state.score += pts;
+      state.results.push("ok");
+      if(fb){ fb.textContent = "LOGGED · +" + pts; fb.className = "feedback ok"; }
+    } else {
+      state.streak = 0;
+      state.results.push("bad");
+      if(fb){ fb.textContent = "MISSED"; fb.className = "feedback bad"; }
+    }
+
+    state.round++;
+    setTimeout(nextRound, 800);
+  }
+
+  /* ---------------- END SCREEN ---------------- */
+  function endGame(){
+    clearFieldStates();
+    var hits = state.results.filter(function(x){return x==="ok";}).length;
+
+    $screen.innerHTML =
+      '<h1 class="title">Shift complete.</h1>' +
+      '<p class="lede">' + (hits === ROUNDS.length
+        ? "Clean sheet. That’s a scorekeeper’s night."
+        : "That’s the job — fast calls, no do-overs.") + '</p>' +
+      '<div class="stat-row">' +
+        '<div class="stat"><div class="num">' + hits + '/' + ROUNDS.length + '</div><div class="cap">Calls logged</div></div>' +
+        '<div class="stat"><div class="num">' + state.bestStreak + '</div><div class="cap">Best streak</div></div>' +
+        '<div class="stat"><div class="num">' + state.score + '</div><div class="cap">Points</div></div>' +
+      '</div>' +
+      '<a class="btn btn-gold" style="text-align:center; text-decoration:none;" href="https://scoregig.ca" target="_blank" rel="noopener">Get Paid To Do This &rarr;</a>' +
+      '<button class="btn btn-ghost" id="btn-again">Run It Back</button>' +
+      '<p class="cta-line">ScoreGIG connects real scorekeepers with real games across the Fraser Valley.</p>';
+
+    document.getElementById("btn-again").addEventListener("click", renderStart);
+  }
+
+  /* ---------------- keyboard support (desktop) ---------------- */
+  document.addEventListener("keydown", function(e){
+    if(state.round >= ROUNDS.length) return;
+    var call = currentCall();
+    if(call.type === "clock" || call.type === "penalty"){
+      var target = call.type === "penalty" ? els.penalty : els.clock;
+      if(/^[0-9]$/.test(e.key) && state.digits.length < 4){
+        state.digits.push(e.key);
+        target.textContent = fmt(state.digits.join(""));
+      } else if(e.key === "Backspace"){
+        state.digits.pop();
+        target.textContent = fmt(state.digits.join(""));
+      } else if(e.key === "Enter"){
+        var btn = document.getElementById("btn-enter");
+        if(btn && !btn.disabled) btn.click();
+      }
+    }
+  });
+
+  /* ---------------- boot / hot state ---------------- */
+  function boot(){
+    renderStart();
+  }
+  try{
+    if(window.claude && window.claude.hot && window.claude.hot.ready){
+      window.claude.hot.ready(boot);
+    } else {
+      boot();
+    }
+  } catch(e){ boot(); }
+
+})();
+</script>
