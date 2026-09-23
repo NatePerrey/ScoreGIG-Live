@@ -2,7 +2,7 @@
 // roles (organizer + scorekeeper). Age range is collected at signup; 12–17
 // routes payouts through a guardian later in the flow.
 import { useState } from "react";
-import { Megaphone, ClipboardList, DollarSign, CheckCircle2, GraduationCap } from "lucide-react";
+import { Megaphone, ClipboardList, DollarSign, CheckCircle2, GraduationCap, Play } from "lucide-react";
 import { C } from "./theme.js";
 import { api, setToken } from "./api.js";
 import TermsModal from "./components/TermsModal.jsx";
@@ -158,6 +158,19 @@ export default function Login({ onAuthed }) {
             </ul>
           </div>
         </div>
+      </div>
+
+      {/* PLAY DEMO — links out to the standalone scoreboard-op demo game (Sep22) */}
+      <div className="mx-auto max-w-2xl px-4 pb-6 text-center">
+        <a href="/play.html"
+          className="inline-flex items-center gap-2 rounded-lg border px-5 py-2.5 text-sm font-bold transition-colors"
+          style={{ borderColor: C.amber, color: C.amber }}>
+          <Play size={16} fill={C.amber} />
+          Try running a live scoreboard
+        </a>
+        <p className="mt-2 text-[12px]" style={{ color: "rgba(255,255,255,0.5)" }}>
+          A quick, no-signup demo of what a scorekeeper actually does.
+        </p>
       </div>
 
       {/* YOUTH EMPLOYMENT CALLOUT — promotes hiring local youth scorekeepers (Sep22) */}
