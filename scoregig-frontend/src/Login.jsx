@@ -54,6 +54,11 @@ export default function Login({ onAuthed }) {
         : { email, password };
       const { token } = await api(path, { method: "POST", body });
       setToken(token);
+      // Meta Pixel: fire only on a successful sign-up (not login), covers
+      // both organizers and scorekeepers since one account does both roles.
+      if (mode === "signup" && typeof window !== "undefined" && typeof window.fbq === "function") {
+        window.fbq("track", "CompleteRegistration");
+      }
       onAuthed();
     } catch (e) {
       setErr(e.message);
