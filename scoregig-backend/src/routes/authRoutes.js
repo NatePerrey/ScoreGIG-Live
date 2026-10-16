@@ -40,10 +40,10 @@ authRoutes.post("/signup", (req, res) => {
   if (!name) return res.status(400).json({ error: "Please enter your name." });
   if (!EMAIL_RE.test(email)) return res.status(400).json({ error: "Please enter a valid email." });
   if (password.length < 8) return res.status(400).json({ error: "Password must be at least 8 characters." });
-  if (!["15-17", "18-25", "26+"].includes(ageRange)) {
+  if (!["under18", "over18"].includes(ageRange)) {
     return res.status(400).json({ error: "You must be at least 15 years old to join ScoreGIG. Please select a valid age range." });
   }
-  if (ageRange === "15-17" && req.body.confirmAge !== true) {
+  if (ageRange === "under18" && req.body.confirmAge !== true) {
     return res.status(400).json({ error: "Please confirm you're at least 15 years old." });
   }
 
@@ -56,13 +56,13 @@ authRoutes.post("/signup", (req, res) => {
   const existing = db.prepare("SELECT id FROM users WHERE email = ?").get(email);
   if (existing) return res.status(409).json({ error: "An account with that email already exists." });
 
-  const isAdult = ageRange === "15-17" ? 0 : 1;
+  const isAdult = ageRange === "under18" ? 0 : 1;
   const hash = bcrypt.hashSync(password, 10);
 
   // Minor (15–17): a parent/guardian email is required. The account is created
   // right away but starts in 'pending' consent — they can browse but can't post
   // or request gigs until the guardian confirms via the emailed link.
-  const isMinorSignup = ageRange === "15-17";
+  const isMinorSignup = ageRange === "under18";
   const guardianEmail = (req.body.guardianEmail || "").trim().toLowerCase();
   if (isMinorSignup) {
     if (!EMAIL_RE.test(guardianEmail)) {

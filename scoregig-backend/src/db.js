@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,             -- bcrypt hash; never store plain passwords
   is_adult INTEGER NOT NULL DEFAULT 1,     -- 1 = 18+, 0 = under 18 (self-reported at signup)
-  age_range TEXT,                          -- '15-17' | '18-25' | '26+'
+  age_range TEXT,                          -- 'under18' | 'over18'
   is_admin INTEGER NOT NULL DEFAULT 0,     -- platform owner; sees the admin dashboard
   stripe_customer_id TEXT,                 -- as organizer: saved-card customer
   default_payment_method TEXT,             -- as organizer: card saved via SetupIntent
